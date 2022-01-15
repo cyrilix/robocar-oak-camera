@@ -20,7 +20,6 @@ ADD setup.py .
 
 ENV PYTHON_EGG_CACHE=/tmp/cache
 RUN python3 setup.py install && rm -rf /src
-#RUN mkdir -p ${PYTHON_EGG_CACHE}
 
 WORKDIR /tmp
 USER 1234
