@@ -16,7 +16,7 @@ Options:
 """
 import logging
 import os
-import camera.depthai as cam
+from . import depthai as cam
 from docopt import docopt
 import paho.mqtt.client as mqtt
 
