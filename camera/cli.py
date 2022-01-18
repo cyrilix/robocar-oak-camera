@@ -1,8 +1,9 @@
 """
 Publish data from oak-lite device
 
-Usage: rc-oak-camera [-u USERNAME | --mqtt-username=USERNAME] [--mqtt-password=PASSWORD] [--mqtt-broker=HOSTNAME]
-[--mqtt-topic-robocar-oak-camera="TOPIC_CAMERA"] [--mqtt-client-id=CLIENT_ID]
+Usage: rc-oak-camera [-u USERNAME | --mqtt-username=USERNAME] [--mqtt-password=PASSWORD] [--mqtt-broker=HOSTNAME] \
+    [--mqtt-topic-robocar-oak-camera="TOPIC_CAMERA"] [--mqtt-client-id=CLIENT_ID] \
+    [-H IMG_HEIGHT | --image-height=IMG_HEIGHT] [-W IMG_WIDTH | --image-width=IMG_width]
 
 Options:
 -h --help                                               Show this screen.
@@ -31,7 +32,7 @@ def init_mqtt_client(broker_host: str, user: str, password: str, client_id: str)
     client = mqtt.Client(client_id=client_id, clean_session=True, userdata=None, protocol=mqtt.MQTTv311)
 
     client.username_pw_set(user, password)
-    logger.info("Connect to mqtt broker")
+    logger.info("Connect to mqtt broker "+ broker_host+ " -> " + user + " / " + password)
     client.connect(host=broker_host, port=1883, keepalive=60)
     logger.info("Connected to mqtt broker")
     return client
