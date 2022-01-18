@@ -1,7 +1,7 @@
 """
 Publish data from oak-lite device
 
-Usage: rc-oak-robocar-oak-camera [-u USERNAME | --mqtt-username=USERNAME] [--mqtt-password=PASSWORD] [--mqtt-broker=HOSTNAME]
+Usage: rc-oak-camera [-u USERNAME | --mqtt-username=USERNAME] [--mqtt-password=PASSWORD] [--mqtt-broker=HOSTNAME]
 [--mqtt-topic-robocar-oak-camera="TOPIC_CAMERA"] [--mqtt-client-id=CLIENT_ID]
 
 Options:

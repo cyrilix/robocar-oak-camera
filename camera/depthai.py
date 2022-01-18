@@ -7,25 +7,9 @@ from google.protobuf.timestamp_pb2 import Timestamp
 import depthai as dai
 import cv2
 
-
 from threading import Thread
 
 logger = logging.getLogger(__name__)
-
-"""
-This example shows usage of Camera Control message as well as ColorCamera configInput to change crop x and y
-Uses 'WASD' controls to move the crop window, 'C' to capture a still image, 'T' to trigger autofocus, 'IOKL,.[]'
-for manual exposure/focus/white-balance:
-  Control:      key[dec/inc]  min..max
-  exposure time:     I   O      1..33000 [us]
-  sensitivity iso:   K   L    100..1600
-  focus:             ,   .      0..255 [far..near]
-  white balance:     [   ]   1000..12000 (light color temperature K)
-To go back to auto controls:
-  'E' - autoexposure
-  'F' - autofocus (continuous)
-  'B' - auto white-balance
-"""
 
 
 class FramePublisher(Thread):
@@ -94,5 +78,3 @@ class FramePublisher(Thread):
 
                 except Exception as e:
                     logger.exception("unexpected error")
-
-
