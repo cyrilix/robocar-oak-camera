@@ -1,4 +1,4 @@
-FROM docker.io/library/python:3.9-slim
+FROM docker.io/luxonis/depthai-base
 
 # Configure piwheels repo to use pre-compiled numpy wheels for arm
 RUN echo -n "[global]\nextra-index-url=https://www.piwheels.org/simple\n" >> /etc/pip.conf
