@@ -5,6 +5,7 @@ import events.events_pb2
 from google.protobuf.timestamp_pb2 import Timestamp
 
 import depthai as dai
+from depthai_sdk import getDeviceInfo
 import cv2
 
 from threading import Thread
@@ -20,61 +21,64 @@ class FramePublisher(Thread):
         self._img_width = img_width
         self._img_height = img_height
         self._pipeline = self._configure_pipeline()
+        self._device_info = getDeviceInfo("18443010012F6C1200")
 
     def _configure_pipeline(self) -> dai.Pipeline:
         logger.info("configure pipeline")
         pipeline = dai.Pipeline()
+
         cam_rgb = pipeline.create(dai.node.ColorCamera)
-        cam_rgb.setResolution(dai.ColorCameraProperties.SensorResolution.THE_1080_P)
-        cam_rgb.setInterleaved(False)
-        cam_rgb.setColorOrder(dai.ColorCameraProperties.ColorOrder.RGB)
+        xout_rgb = pipeline.create(dai.node.XLinkOut)
 
-        # Define sources and outputs
-        manip = pipeline.create(dai.node.ImageManip)
-
-        manip_out = pipeline.create(dai.node.XLinkOut)
-
-        manip_out.setStreamName("manip")
+        xout_rgb.setStreamName("rgb")
 
         # Properties
         cam_rgb.setBoardSocket(dai.CameraBoardSocket.RGB)
-        cam_rgb.setResolution(dai.ColorCameraProperties.SensorResolution.THE_1080_P)
-
-        manip.initialConfig.setResize(self._img_width, self._img_height)
+        cam_rgb.setPreviewSize(width=self._img_width, height=self._img_height)
+        cam_rgb.setInterleaved(False)
+        cam_rgb.setColorOrder(dai.ColorCameraProperties.ColorOrder.RGB)
+        cam_rgb.setFps(30)
 
         # Linking
-        cam_rgb.video.link(manip.inputImage)
-        manip.out.link(manip_out.input)
+        cam_rgb.video.link(xout_rgb.input)
         logger.info("pipeline configured")
         return pipeline
 
     def run(self):
+        logger.info("device %s", self._device_info)
         # Connect to device and start pipeline
         with dai.Device(self._pipeline) as device:
+            logger.info('MxId: %s', device.getDeviceInfo().getMxId())
+            logger.info('USB speed: %s', device.getUsbSpeed())
+            logger.info('Connected cameras: %s', device.getConnectedCameras())
+
+            logger.info("output queues found: %s",device.getOutputQueueNames())
+
+            device.startPipeline()
             # Queues
-            queue_size = 8
-            queue_manip = device.getOutputQueue("manip", queue_size)
+            queue_size = 4
+            q_rgb = device.getOutputQueue("rgb", maxSize=queue_size, blocking=False)
 
             while True:
                 try:
-                    while queue_manip.has():
-                        im_resize = queue_manip.get().getData().getCvFrame()
+                    inRgb = q_rgb.get()  # blocking call, will wait until a new data has arrived
 
-                        is_success, im_buf_arr = cv2.imencode(".jpg", im_resize)
-                        byte_im = im_buf_arr.tobytes()
+                    im_resize = inRgb.getCvFrame()
 
-                        timestamp = Timestamp()
-                        frame_msg = events.events_pb2.FrameMessage()
-                        frame_msg.id = events.events_pb2.FrameRef()
-                        frame_msg.id.name = "robocar-oak-camera-oak"
-                        frame_msg.id.id = timestamp.ToMilliseconds()
-                        frame_msg.id.created_at = timestamp.GetCurrentTime()
-                        frame_msg.frame = byte_im
+                    is_success, im_buf_arr = cv2.imencode(".jpg", im_resize)
+                    byte_im = im_buf_arr.tobytes()
 
-                        self._mqtt_client.publish(topic=self._frame_topic,
-                                                  payload=frame_msg.SerializeToString(),
-                                                  qos=0,
-                                                  retain=False)
+                    timestamp = Timestamp()
+                    frame_msg = events.events_pb2.FrameMessage()
+                    frame_msg.id.name = "robocar-oak-camera-oak"
+                    frame_msg.id.id = str(timestamp.ToMilliseconds())
+                    frame_msg.id.created_at.FromMilliseconds(timestamp.ToMilliseconds())
+                    frame_msg.frame = byte_im
+
+                    self._mqtt_client.publish(topic=self._frame_topic,
+                                              payload=frame_msg.SerializeToString(),
+                                              qos=0,
+                                              retain=False)
 
                 except Exception as e:
                     logger.exception("unexpected error")
