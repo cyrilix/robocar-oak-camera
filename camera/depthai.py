@@ -47,7 +47,7 @@ class FramePublisher(Thread):
     def run(self):
         logger.info("device %s", self._device_info)
         # Connect to device and start pipeline
-        with dai.Device(self._pipeline) as device:
+        with dai.Device(self._pipeline, devInfo=self._device_info, usb2Mode=False) as device:
             logger.info('MxId: %s', device.getDeviceInfo().getMxId())
             logger.info('USB speed: %s', device.getUsbSpeed())
             logger.info('Connected cameras: %s', device.getConnectedCameras())
