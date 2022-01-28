@@ -37,7 +37,7 @@ class FramePublisher:
         cam_rgb.setFps(30)
 
         # Linking
-        cam_rgb.video.link(xout_rgb.input)
+        cam_rgb.preview.link(xout_rgb.input)
         logger.info("pipeline configured")
         return pipeline
 
