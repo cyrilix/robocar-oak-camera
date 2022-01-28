@@ -42,14 +42,14 @@ class FramePublisher:
         return pipeline
 
     def run(self):
-        logger.info("device %s", self._device_info)
+        logger.debug("device %s", self._device_info)
         # Connect to device and start pipeline
         with dai.Device(self._pipeline, devInfo=self._device_info, usb2Mode=False) as device:
             logger.info('MxId: %s', device.getDeviceInfo().getMxId())
             logger.info('USB speed: %s', device.getUsbSpeed())
             logger.info('Connected cameras: %s', device.getConnectedCameras())
 
-            logger.info("output queues found: %s",device.getOutputQueueNames())
+            logger.info("output queues found: %s", device.getOutputQueueNames())
 
             device.startPipeline()
             # Queues
@@ -58,6 +58,7 @@ class FramePublisher:
 
             while True:
                 try:
+                    logger.debug("wait for new frame")
                     inRgb = q_rgb.get()  # blocking call, will wait until a new data has arrived
 
                     im_resize = inRgb.getCvFrame()
@@ -72,10 +73,11 @@ class FramePublisher:
                     frame_msg.id.created_at.FromMilliseconds(timestamp.ToMilliseconds())
                     frame_msg.frame = byte_im
 
+                    logger.debug("publish frame event to %s", self._frame_topic)
                     self._mqtt_client.publish(topic=self._frame_topic,
                                               payload=frame_msg.SerializeToString(),
                                               qos=0,
                                               retain=False)
 
                 except Exception as e:
-                    logger.exception("unexpected error")
+                    logger.exception("unexpected error: %s", str(e))
