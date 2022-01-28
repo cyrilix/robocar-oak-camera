@@ -5,7 +5,6 @@ import events.events_pb2
 from google.protobuf.timestamp_pb2 import Timestamp
 
 import depthai as dai
-from depthai_sdk import getDeviceInfo
 import cv2
 
 logger = logging.getLogger(__name__)
@@ -18,7 +17,6 @@ class FramePublisher:
         self._img_width = img_width
         self._img_height = img_height
         self._pipeline = self._configure_pipeline()
-        self._device_info = getDeviceInfo("18443010012F6C1200")
 
     def _configure_pipeline(self) -> dai.Pipeline:
         logger.info("configure pipeline")
@@ -42,9 +40,8 @@ class FramePublisher:
         return pipeline
 
     def run(self):
-        logger.debug("device %s", self._device_info)
         # Connect to device and start pipeline
-        with dai.Device(self._pipeline, devInfo=self._device_info, usb2Mode=False) as device:
+        with dai.Device(self._pipeline) as device:
             logger.info('MxId: %s', device.getDeviceInfo().getMxId())
             logger.info('USB speed: %s', device.getUsbSpeed())
             logger.info('Connected cameras: %s', device.getConnectedCameras())
