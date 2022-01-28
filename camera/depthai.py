@@ -8,14 +8,11 @@ import depthai as dai
 from depthai_sdk import getDeviceInfo
 import cv2
 
-from threading import Thread
-
 logger = logging.getLogger(__name__)
 
 
-class FramePublisher(Thread):
+class FramePublisher:
     def __init__(self, mqtt_client: mqtt.Client, frame_topic: str, img_width: int, img_height: int):
-        super().__init__(name="FrameProcessor")
         self._mqtt_client = mqtt_client
         self._frame_topic = frame_topic
         self._img_width = img_width

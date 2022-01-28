@@ -32,7 +32,7 @@ def init_mqtt_client(broker_host: str, user: str, password: str, client_id: str)
     client = mqtt.Client(client_id=client_id, clean_session=True, userdata=None, protocol=mqtt.MQTTv311)
 
     client.username_pw_set(user, password)
-    logger.info("Connect to mqtt broker "+ broker_host+ " -> " + user + " / " + password)
+    logger.info("Connect to mqtt broker "+ broker_host)
     client.connect(host=broker_host, port=1883, keepalive=60)
     logger.info("Connected to mqtt broker")
     return client
@@ -55,9 +55,7 @@ def execute_from_command_line():
                                          frame_topic=frame_topic,
                                          img_width=int(get_default_value(args["--image-width"], "IMAGE_WIDTH", 160)),
                                          img_height=int(get_default_value(args["--image-height"], "IMAGE_HEIGHT", 120)))
-    frame_processor.start()
-
-    client.loop_forever()
+    frame_processor.run()
 
 
 def get_default_value(value, env_var: str, default_value) -> str:
