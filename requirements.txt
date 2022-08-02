@@ -5,3 +5,4 @@ opencv-python~=4.5.5.62
 google~=3.0.0
 google-api-core~=2.4.0
 setuptools==60.5.0
+protobuf3
