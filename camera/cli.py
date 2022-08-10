@@ -2,8 +2,10 @@
 Publish data from oak-lite device
 
 Usage: rc-oak-camera [-u USERNAME | --mqtt-username=USERNAME] [--mqtt-password=PASSWORD] [--mqtt-broker=HOSTNAME] \
-    [--mqtt-topic-robocar-oak-camera="TOPIC_CAMERA"] [--mqtt-client-id=CLIENT_ID] \
-    [-H IMG_HEIGHT | --image-height=IMG_HEIGHT] [-W IMG_WIDTH | --image-width=IMG_width]
+    [--mqtt-topic-robocar-oak-camera="TOPIC_CAMERA"] [--mqtt-topic-robocar-objects="TOPIC_OBJECTS"] \
+    [--mqtt-client-id=CLIENT_ID] \
+    [-H IMG_HEIGHT | --image-height=IMG_HEIGHT] [-W IMG_WIDTH | --image-width=IMG_width] \
+    [-t OBJECTS_THRESHOLD | --objects-threshold=OBJECTS_THRESHOLD]
 
 Options:
 -h --help                                               Show this screen.
@@ -12,8 +14,10 @@ Options:
 -b HOSTNAME --mqtt-broker=HOSTNAME                      MQTT broker host
 -C CLIENT_ID --mqtt-client-id=CLIENT_ID                 MQTT client id
 -c TOPIC_CAMERA --mqtt-topic-robocar-oak-camera=TOPIC_CAMERA        MQTT topic where to publish robocar-oak-camera frames
+-o TOPIC_OBJECTS --mqtt-topic-robocar-objects=TOPIC_OBJECTS         MQTT topic where to publish objects detection results
 -H IMG_HEIGHT --image-height=IMG_HEIGHT                 IMG_HEIGHT image height
 -W IMG_WIDTH --image-width=IMG_width                    IMG_WIDTH image width
+-t OBJECTS_THRESHOLD --objects-threshold=OBJECTS_THRESHOLD    OBJECTS_THRESHOLD threshold to filter objects detected
 """
 import logging
 import os
@@ -50,9 +54,13 @@ def execute_from_command_line():
                                                           default_client_id),
                               )
     frame_topic = get_default_value(args["--mqtt-topic-robocar-oak-camera"], "MQTT_TOPIC_CAMERA", "/oak/camera_rgb")
+    objects_topic = get_default_value(args["--mqtt-topic-robocar-objects"], "MQTT_TOPIC_OBJECTS", "/objects")
 
     frame_processor = cam.FramePublisher(mqtt_client=client,
                                          frame_topic=frame_topic,
+                                         objects_topic=objects_topic,
+                                         objects_threshold=float(get_default_value(args["--objects-threshold"],
+                                                                                   "OBJECTS_THRESHOLD", 0.2)),
                                          img_width=int(get_default_value(args["--image-width"], "IMAGE_WIDTH", 160)),
                                          img_height=int(get_default_value(args["--image-height"], "IMAGE_HEIGHT", 120)))
     frame_processor.run()

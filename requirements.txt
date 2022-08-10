@@ -5,3 +5,4 @@ opencv-python==4.6.0.66
 google~=3.0.0
 google-api-core~=2.4.0
 setuptools==60.5.0
+blobconverter==1.3.0

@@ -1,3 +1,12 @@
+FROM docker.io/library/python:3.9-slim AS model
+
+RUN python3 -m pip install blobconverter
+
+RUN mkdir -p /models
+
+RUN blobconverter --zoo-name mobile_object_localizer_192x192 --zoo-type depthai --shaves 6 --version 2021.4 --output-dir /models || echo ""
+RUN ls /models
+#######
 FROM docker.io/library/python:3.9-slim
 
 # Configure piwheels repo to use pre-compiled numpy wheels for arm
@@ -7,6 +16,9 @@ RUN apt-get update && apt-get install -y libgl1 libglib2.0-0
 
 RUN pip3 install numpy
 
+RUN mkdir /models
+
+COPY --from=model /models/mobile_object_localizer_192x192_openvino_2021.4_6shave.blob /models/mobile_object_localizer_192x192_openvino_2021.4_6shave.blob
 ADD requirements.txt requirements.txt
 
 RUN pip3 install -r requirements.txt
