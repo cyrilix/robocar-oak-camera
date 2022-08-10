@@ -6,3 +6,4 @@ google~=3.0.0
 google-api-core~=2.4.0
 setuptools==60.5.0
 protobuf3
+blobconverter>=1.2.9
