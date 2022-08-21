@@ -130,9 +130,9 @@ class FramePublisher:
                             o = events.events_pb2.Object()
                             o.type = events.events_pb2.TypeObject.ANY
                             o.top = bbox[0].astype(float)
-                            o.right = bbox[1].astype(float)
+                            o.right = bbox[3].astype(float)
                             o.bottom = bbox[2].astype(float)
-                            o.left = bbox[3].astype(float)
+                            o.left = bbox[1].astype(float)
                             o.confidence = scores[i].astype(float)
                             objs.append(o)
                         objects_msg.objects.extend(objs)
