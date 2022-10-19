@@ -1,2 +1,6 @@
 venv
+dist/
+build-docker.sh
+Dockerfile
+
 
