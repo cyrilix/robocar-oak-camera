@@ -108,14 +108,6 @@ optional = false
 python-versions = ">=3.6"
 
 [[package]]
-name = "docopt"
-version = "0.6.2"
-description = "Pythonic argument parser, that will make you smile"
-category = "main"
-optional = false
-python-versions = "*"
-
-[[package]]
 name = "google"
 version = "3.0.0"
 description = "Python bindings to the Google search engine."
@@ -354,7 +346,7 @@ socks = ["PySocks (>=1.5.6,!=1.5.7,<2.0)"]
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.10"
-content-hash = "93f922ddb9c03189bf1efabdcf702513ff5526332a78f54c21ab532574f4519a"
+content-hash = "b165038947d8a9e0e256c91b449c4cbd1e65ccfd0e65f271d002fc8e21e2640e"
 
 [metadata.files]
 attrs = [
@@ -420,9 +412,6 @@ depthai = [
     {file = "depthai-2.17.4.0-cp39-cp39-win32.whl", hash = "sha256:700638ad886fa03b4d2e3a8d76e1c19b9ebcc4a08f4202100670f7ac7de6f7a9"},
     {file = "depthai-2.17.4.0-cp39-cp39-win_amd64.whl", hash = "sha256:de7b5e4a15b0a9e15fdf19c5388e6aa9629ecc25a955675d400173f9a2dd199b"},
     {file = "depthai-2.17.4.0.tar.gz", hash = "sha256:b8e3c2eaa643c64e737435adaa23d54e3fda58baad1477f5176908689473a85f"},
-]
-docopt = [
-    {file = "docopt-0.6.2.tar.gz", hash = "sha256:49b3a825280bd66b3aa83585ef59c4a8c82f2c8a522dbe754a8bc8d08c85c491"},
 ]
 google = [
     {file = "google-3.0.0-py2.py3-none-any.whl", hash = "sha256:889cf695f84e4ae2c55fbc0cfdaf4c1e729417fa52ab1db0485202ba173e4935"},
