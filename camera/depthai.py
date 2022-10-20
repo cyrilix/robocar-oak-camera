@@ -1,12 +1,15 @@
+"""
+Camera event loop
+"""
 import datetime
 import logging
+
+import cv2
+import depthai as dai
+import numpy as np
 import paho.mqtt.client as mqtt
 
 import events.events_pb2
-
-import depthai as dai
-import cv2
-import numpy as np
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +19,10 @@ NN_HEIGHT = 192
 
 
 class FramePublisher:
+    """
+    Camera controller that publish events from camera
+    """
+
     def __init__(self, mqtt_client: mqtt.Client, frame_topic: str, objects_topic: str, objects_threshold: float,
                  img_width: int, img_height: int):
         self._mqtt_client = mqtt_client
@@ -25,6 +32,7 @@ class FramePublisher:
         self._img_width = img_width
         self._img_height = img_height
         self._pipeline = self._configure_pipeline()
+        self._stop = False
 
     def _configure_pipeline(self) -> dai.Pipeline:
         logger.info("configure pipeline")
@@ -53,7 +61,6 @@ class FramePublisher:
         xout_rgb = pipeline.create(dai.node.XLinkOut)
         xout_rgb.setStreamName("rgb")
 
-
         # Properties
         cam_rgb.setBoardSocket(dai.CameraBoardSocket.RGB)
         cam_rgb.setPreviewSize(width=self._img_width, height=self._img_height)
@@ -72,7 +79,11 @@ class FramePublisher:
         logger.info("pipeline configured")
         return pipeline
 
-    def run(self):
+    def run(self) -> None:
+        """
+        Start event loop
+        :return:
+        """
         # Connect to device and start pipeline
         with dai.Device(self._pipeline) as device:
             logger.info('MxId: %s', device.getDeviceInfo().getMxId())
@@ -87,12 +98,15 @@ class FramePublisher:
             q_rgb = device.getOutputQueue(name="rgb", maxSize=queue_size, blocking=False)
             q_nn = device.getOutputQueue(name="nn", maxSize=queue_size, blocking=False)
 
+            self._stop = False
             while True:
+                if self._stop:
+                    return
                 try:
                     logger.debug("wait for new frame")
-                    inRgb = q_rgb.get()  # blocking call, will wait until a new data has arrived
+                    in_rgb = q_rgb.get()  # blocking call, will wait until a new data has arrived
 
-                    im_resize = inRgb.getCvFrame()
+                    im_resize = in_rgb.getCvFrame()
 
                     is_success, im_buf_arr = cv2.imencode(".jpg", im_resize)
                     byte_im = im_buf_arr.tobytes()
@@ -127,14 +141,14 @@ class FramePublisher:
                         for i in range(boxes.shape[0]):
                             bbox = boxes[i]
                             logger.debug("new object detected: %s", str(bbox))
-                            o = events.events_pb2.Object()
-                            o.type = events.events_pb2.TypeObject.ANY
-                            o.top = bbox[0].astype(float)
-                            o.right = bbox[3].astype(float)
-                            o.bottom = bbox[2].astype(float)
-                            o.left = bbox[1].astype(float)
-                            o.confidence = scores[i].astype(float)
-                            objs.append(o)
+                            obj = events.events_pb2.Object()
+                            obj.type = events.events_pb2.TypeObject.ANY
+                            obj.top = bbox[0].astype(float)
+                            obj.right = bbox[3].astype(float)
+                            obj.bottom = bbox[2].astype(float)
+                            obj.left = bbox[1].astype(float)
+                            obj.confidence = scores[i].astype(float)
+                            objs.append(obj)
                         objects_msg.objects.extend(objs)
 
                         objects_msg.frame_ref.name = frame_msg.id.name
@@ -147,5 +161,13 @@ class FramePublisher:
                                                   qos=0,
                                                   retain=False)
 
-                except Exception as e:
-                    logger.exception("unexpected error: %s", str(e))
+                # pylint: disable=broad-except # bad frame or event must not stop loop
+                except Exception as excpt:
+                    logger.exception("unexpected error: %s", str(excpt))
+
+    def stop(self):
+        """
+        Stop event loop, if loop is not running, do nothing
+        :return:
+        """
+        self._stop = True

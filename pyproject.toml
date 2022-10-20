@@ -23,6 +23,10 @@ protobuf = "^4.21.8"
 [tool.poetry.group.test.dependencies]
 pytest = "^7.1.3"
 
+
+[tool.poetry.group.dev.dependencies]
+pylint = "^2.15.4"
+
 [build-system]
 requires = ["poetry-core>=1.0.0", "poetry-dynamic-versioning"]
 build-backend = "poetry_dynamic_versioning.backend"

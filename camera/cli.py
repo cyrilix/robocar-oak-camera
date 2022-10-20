@@ -1,27 +1,36 @@
+"""
+Mqtt gateway for oak-lite device
+"""
+import argparse
 import logging
 import os
-from . import depthai as cam
+
 import paho.mqtt.client as mqtt
-import argparse
+
+from . import depthai as cam
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
-default_client_id = "robocar-depthai"
+_DEFAULT_CLIENT_ID = "robocar-depthai"
 
 
-def init_mqtt_client(broker_host: str, broker_port, user: str, password: str, client_id: str) -> mqtt.Client:
+def _init_mqtt_client(broker_host: str, broker_port, user: str, password: str, client_id: str) -> mqtt.Client:
     logger.info("Start part.py-robocar-oak-camera")
     client = mqtt.Client(client_id=client_id, clean_session=True, userdata=None, protocol=mqtt.MQTTv311)
 
     client.username_pw_set(user, password)
-    logger.info("Connect to mqtt broker "+ broker_host)
+    logger.info("Connect to mqtt broker %s", broker_host)
     client.connect(host=broker_host, port=broker_port, keepalive=60)
     logger.info("Connected to mqtt broker")
     return client
 
 
-def execute_from_command_line():
+def execute_from_command_line() -> None:
+    """
+    Cli entrypoint
+    :return:
+    """
     logging.basicConfig(level=logging.INFO)
 
     parser = argparse.ArgumentParser()
@@ -40,10 +49,10 @@ def execute_from_command_line():
                         default=_get_env_int_value("MQTT_BROKER_PORT", 1883))
     parser.add_argument("-C", "--mqtt-client-id",
                         help="MQTT client id",
-                        default=_get_env_value("MQTT_CLIENT_ID", default_client_id))
+                        default=_get_env_value("MQTT_CLIENT_ID", _DEFAULT_CLIENT_ID))
     parser.add_argument("-c", "--mqtt-topic-robocar-oak-camera",
                         help="MQTT topic where to publish robocar-oak-camera frames",
-                        default=_get_env_value("MQTT_TOPIC_CAMERA","/oak/camera_rgb"))
+                        default=_get_env_value("MQTT_TOPIC_CAMERA", "/oak/camera_rgb"))
     parser.add_argument("-o", "---mqtt-topic-robocar-objects",
                         help="MQTT topic where to publish objects detection results",
                         default=_get_env_value("MQTT_TOPIC_OBJECTS", "/objects"))
@@ -60,12 +69,12 @@ def execute_from_command_line():
 
     args = parser.parse_args()
 
-    client = init_mqtt_client(broker_host=args.mqtt_broker_host,
-                              broker_port=args.mqtt_broker_port,
-                              user=args.mqtt_username,
-                              password=args.mqtt_password,
-                              client_id=args.mqtt_client_id,
-                              )
+    client = _init_mqtt_client(broker_host=args.mqtt_broker_host,
+                               broker_port=args.mqtt_broker_port,
+                               user=args.mqtt_username,
+                               password=args.mqtt_password,
+                               client_id=args.mqtt_client_id,
+                               )
     frame_processor = cam.FramePublisher(mqtt_client=client,
                                          frame_topic=args.mqtt_topic_robocar_oak_camera,
                                          objects_topic=args.mqtt_topic_robocar_objects,
