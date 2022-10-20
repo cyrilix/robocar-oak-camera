@@ -14,9 +14,9 @@ import events.events_pb2
 
 logger = logging.getLogger(__name__)
 
-NN_PATH = "/models/mobile_object_localizer_192x192_openvino_2021.4_6shave.blob"
-NN_WIDTH = 192
-NN_HEIGHT = 192
+_NN_PATH = "/models/mobile_object_localizer_192x192_openvino_2021.4_6shave.blob"
+_NN_WIDTH = 192
+_NN_HEIGHT = 192
 
 
 class ObjectProcessor:
@@ -200,11 +200,11 @@ class PipelineController:
         logger.debug("wait for new frame")
 
         # Wait for frame
-        in_rgb = _get_as_imgframe(q_rgb)  # blocking call, will wait until a new data has arrived
+        in_rgb: dai.ImgFrame = q_rgb.get()  # blocking call, will wait until a new data has arrived
         frame_msg, now = self._frame_processor.process(in_rgb)
 
         # Read NN result
-        in_nn = _get_as_nndata(q_nn)
+        in_nn: dai.NNData = q_nn.get()
         self._object_processor.process(in_nn, frame_msg.id, now)
 
     def stop(self):
@@ -213,15 +213,6 @@ class PipelineController:
         :return:
         """
         self._stop = True
-
-
-def _get_as_nndata(queue: dai.DataOutputQueue) -> dai.NNData:
-    return queue.get()
-
-
-def _get_as_imgframe(queue: dai.DataOutputQueue) -> dai.ImgFrame:
-    return queue.get()
-
 
 def _bbox_to_object(bbox: np.array, score: float) -> events.events_pb2.Object:
     obj = events.events_pb2.Object()
