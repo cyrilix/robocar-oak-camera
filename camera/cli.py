@@ -75,13 +75,16 @@ def execute_from_command_line() -> None:
                                password=args.mqtt_password,
                                client_id=args.mqtt_client_id,
                                )
-    frame_processor = cam.FramePublisher(mqtt_client=client,
-                                         frame_topic=args.mqtt_topic_robocar_oak_camera,
-                                         objects_topic=args.mqtt_topic_robocar_objects,
-                                         objects_threshold=args.objects_threshold,
-                                         img_width=args.image_width,
-                                         img_height=args.image_height)
-    frame_processor.run()
+    frame_processor = cam.FrameProcessor(mqtt_client=client, frame_topic=args.mqtt_topic_robocar_oak_camera)
+    object_processor = cam.ObjectProcessor(mqtt_client=client,
+                                           objects_topic=args.mqtt_topic_robocar_objects,
+                                           objects_threshold=args.objects_threshold)
+
+    pipeline_controller = cam.PipelineController(img_width=args.image_width,
+                                                 img_height=args.image_height,
+                                                 frame_processor=frame_processor,
+                                                 object_processor=object_processor)
+    pipeline_controller.run()
 
 
 def _get_env_value(env_var: str, default_value: str) -> str:
