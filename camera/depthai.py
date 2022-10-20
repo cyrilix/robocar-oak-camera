@@ -188,6 +188,7 @@ class PipelineController:
             self._stop = False
             while True:
                 if self._stop:
+                    logger.info("stop loop event")
                     return
                 try:
                     self._loop_on_camera_events(q_nn, q_rgb)

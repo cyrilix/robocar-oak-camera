@@ -4,6 +4,7 @@ Mqtt gateway for oak-lite device
 import argparse
 import logging
 import os
+import signal
 
 import paho.mqtt.client as mqtt
 
@@ -15,24 +16,7 @@ logging.basicConfig(level=logging.INFO)
 _DEFAULT_CLIENT_ID = "robocar-depthai"
 
 
-def _init_mqtt_client(broker_host: str, broker_port, user: str, password: str, client_id: str) -> mqtt.Client:
-    logger.info("Start part.py-robocar-oak-camera")
-    client = mqtt.Client(client_id=client_id, clean_session=True, userdata=None, protocol=mqtt.MQTTv311)
-
-    client.username_pw_set(user, password)
-    logger.info("Connect to mqtt broker %s", broker_host)
-    client.connect(host=broker_host, port=broker_port, keepalive=60)
-    logger.info("Connected to mqtt broker")
-    return client
-
-
-def execute_from_command_line() -> None:
-    """
-    Cli entrypoint
-    :return:
-    """
-    logging.basicConfig(level=logging.INFO)
-
+def _parse_args_cli() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("-u", "--mqtt-username",
                         help="MQTT user",
@@ -66,8 +50,29 @@ def execute_from_command_line() -> None:
     parser.add_argument("-W", "--image-width", help="image width",
                         type=int,
                         default=_get_env_int_value("IMAGE_WIDTH", 126))
-
     args = parser.parse_args()
+    return args
+
+
+def _init_mqtt_client(broker_host: str, broker_port, user: str, password: str, client_id: str) -> mqtt.Client:
+    logger.info("Start part.py-robocar-oak-camera")
+    client = mqtt.Client(client_id=client_id, clean_session=True, userdata=None, protocol=mqtt.MQTTv311)
+
+    client.username_pw_set(user, password)
+    logger.info("Connect to mqtt broker %s", broker_host)
+    client.connect(host=broker_host, port=broker_port, keepalive=60)
+    logger.info("Connected to mqtt broker")
+    return client
+
+
+def execute_from_command_line() -> None:
+    """
+    Cli entrypoint
+    :return:
+    """
+    logging.basicConfig(level=logging.INFO)
+
+    args = _parse_args_cli()
 
     client = _init_mqtt_client(broker_host=args.mqtt_broker_host,
                                broker_port=args.mqtt_broker_port,
@@ -84,6 +89,12 @@ def execute_from_command_line() -> None:
                                                  img_height=args.image_height,
                                                  frame_processor=frame_processor,
                                                  object_processor=object_processor)
+
+    def sigterm_handler():
+        logger.info("exit on SIGTERM")
+        pipeline_controller.stop()
+
+    signal.signal(signal.SIGTERM, sigterm_handler)
     pipeline_controller.run()
 
 
