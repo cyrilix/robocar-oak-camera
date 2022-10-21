@@ -29,12 +29,11 @@ class ObjectProcessor:
         self._objects_topic = objects_topic
         self._objects_threshold = objects_threshold
 
-    def process(self, in_nn: dai.NNData, frame_ref, frame_date: datetime.datetime) -> None:
+    def process(self, in_nn: dai.NNData, frame_ref) -> None:
         """
         Parse and publish result of NeuralNetwork result
         :param in_nn: NeuralNetwork result read from device
         :param frame_ref: Id of the frame where objects are been detected
-        :param frame_date: Datetime of the frame used for detection
         :return:
         """
         detection_boxes = np.array(in_nn.getLayerFp16("ExpandDims")).reshape((100, 4))
@@ -45,9 +44,10 @@ class ObjectProcessor:
         scores = detection_scores[mask]
 
         if boxes.shape[0] > 0:
-            self._publish_objects(boxes, frame_ref, frame_date, scores)
+            self._publish_objects(boxes, frame_ref, scores)
 
-    def _publish_objects(self, boxes: np.array, frame_ref, now: datetime.datetime, scores: np.array) -> None:
+    def _publish_objects(self, boxes: np.array, frame_ref, scores: np.array) -> None:
+
         objects_msg = events.events_pb2.ObjectsMessage()
         objs = []
         for i in range(boxes.shape[0]):
@@ -56,12 +56,27 @@ class ObjectProcessor:
         objects_msg.objects.extend(objs)
         objects_msg.frame_ref.name = frame_ref.name
         objects_msg.frame_ref.id = frame_ref.id
-        objects_msg.frame_ref.created_at.FromDatetime(now)
+        objects_msg.frame_ref.created_at.FromDatetime(frame_ref.created_at.ToDatetime())
         logger.debug("publish object event to %s", self._objects_topic)
         self._mqtt_client.publish(topic=self._objects_topic,
                                   payload=objects_msg.SerializeToString(),
                                   qos=0,
                                   retain=False)
+
+
+class FrameProcessError(Exception):
+    """
+    Error base for invalid frame processing
+
+    Attributes:
+        message -- explanation of the error
+    """
+
+    def __init__(self, message: str):
+        """
+        :param message: explanation of the error
+        """
+        self.message = message
 
 
 class FrameProcessor:
@@ -73,16 +88,19 @@ class FrameProcessor:
         self._mqtt_client = mqtt_client
         self._frame_topic = frame_topic
 
-    def process(self, img: dai.ImgFrame) -> (typing.Any, datetime.datetime):
+    def process(self, img: dai.ImgFrame) -> typing.Any:
         """
         Publish camera frames
         :param img:
         :return:
-            id frame
-            frame creation datetime
+            id frame reference
+        :raise:
+            FrameProcessError if frame can't be processed
         """
         im_resize = img.getCvFrame()
         is_success, im_buf_arr = cv2.imencode(".jpg", im_resize)
+        if not is_success:
+            raise FrameProcessError("unable to process to encode frame to jpg")
         byte_im = im_buf_arr.tobytes()
 
         now = datetime.datetime.now()
@@ -96,7 +114,7 @@ class FrameProcessor:
                                   payload=frame_msg.SerializeToString(),
                                   qos=0,
                                   retain=False)
-        return frame_msg.id, now
+        return frame_msg.id
 
 
 class PipelineController:
@@ -124,7 +142,7 @@ class PipelineController:
 
         # Resize image
         manip = pipeline.create(dai.node.ImageManip)
-        manip.initialConfig.setResize(NN_WIDTH, NN_HEIGHT)
+        manip.initialConfig.setResize(_NN_WIDTH, _NN_HEIGHT)
         manip.initialConfig.setFrameType(dai.ImgFrame.Type.RGB888p)
         manip.initialConfig.setKeepAspectRatio(False)
 
@@ -161,7 +179,7 @@ class PipelineController:
     def _configure_detection_nn(pipeline: dai.Pipeline) -> dai.node.NeuralNetwork:
         # Define a neural network that will make predictions based on the source frames
         detection_nn = pipeline.create(dai.node.NeuralNetwork)
-        detection_nn.setBlobPath(NN_PATH)
+        detection_nn.setBlobPath(_NN_PATH)
         detection_nn.setNumPoolFrames(4)
         detection_nn.input.setBlocking(False)
         detection_nn.setNumInferenceThreads(2)
@@ -201,11 +219,13 @@ class PipelineController:
 
         # Wait for frame
         in_rgb: dai.ImgFrame = q_rgb.get()  # blocking call, will wait until a new data has arrived
-        frame_msg, now = self._frame_processor.process(in_rgb)
-
+        try:
+            frame_ref = self._frame_processor.process(in_rgb)
+        except FrameProcessError as ex:
+            logger.error("unable to process frame: %s", str(ex))
         # Read NN result
         in_nn: dai.NNData = q_nn.get()
-        self._object_processor.process(in_nn, frame_msg.id, now)
+        self._object_processor.process(in_nn, frame_ref)
 
     def stop(self):
         """
@@ -213,6 +233,7 @@ class PipelineController:
         :return:
         """
         self._stop = True
+
 
 def _bbox_to_object(bbox: np.array, score: float) -> events.events_pb2.Object:
     obj = events.events_pb2.Object()
