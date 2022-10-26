@@ -5,13 +5,13 @@ import abc
 import datetime
 import logging
 import typing
+from dataclasses import dataclass
 
 import cv2
 import depthai as dai
+import events.events_pb2
 import numpy as np
 import paho.mqtt.client as mqtt
-
-import events.events_pb2
 
 logger = logging.getLogger(__name__)
 
@@ -92,7 +92,7 @@ class FrameProcessor:
     def process(self, img: dai.ImgFrame) -> typing.Any:
         """
         Publish camera frames
-        :param img:
+        :param img: image read from camera
         :return:
             id frame reference
         :raise:
@@ -119,13 +119,23 @@ class FrameProcessor:
 
 
 class Source(abc.ABC):
-    @abc.abstractmethod
-    def get_stream_name(self) -> str:
-        pass
+    """Base class for image source"""
 
     @abc.abstractmethod
-    def link_preview(self, input_node: dai.Node.Input):
-        pass
+    def get_stream_name(self) -> str:
+        """
+        Queue/stream name to use to get data
+
+        :return: steam name
+        """
+
+    @abc.abstractmethod
+    def link(self, input_node: dai.Node.Input) -> None:
+        """
+        Link this source to the input node
+
+        :param: input_node:  input node to link
+        """
 
 
 class ObjectDetectionNN:
@@ -165,9 +175,18 @@ class ObjectDetectionNN:
         return xout_nn
 
     def get_stream_name(self) -> str:
+        """
+        Queue/stream name to use to get data
+
+        :return: stream name
+        """
         return self._xout.getStreamName()
 
     def get_input(self) -> dai.Node.Input:
+        """
+        Get input node to use to link with source node
+        :return: input to link with source output, see Source.link()
+        """
         return self._manip_image.inputImage
 
 
@@ -192,23 +211,29 @@ class CameraSource(Source):
         # link camera preview to output
         cam_rgb.preview.link(xout_rgb.input)
 
-    def link_preview(self, input_node: dai.Node.Input):
+    def link(self, input_node: dai.Node.Input) -> None:
         self._cam_rgb.preview.link(input_node)
 
     def get_stream_name(self) -> str:
         return self._xout_rgb.getStreamName()
 
 
+@dataclass
+class MqttConfig:
+    """MQTT configuration"""
+    host: str
+    topic: str
+    port: int = 1883
+    qos: int = 0
+
+
 class MqttSource(Source):
     """Image source based onto mqtt stream"""
 
-    def __init__(self, device: dai.Device, pipeline: dai.Pipeline, mqtt_host: str, mqtt_topic: str,
-                 mqtt_port: int = 1883, mqtt_qos: int = 0):
-        self._mqtt_host = mqtt_host
-        self._mqtt_port = mqtt_port
-
+    def __init__(self, device: dai.Device, pipeline: dai.Pipeline, mqtt_config: MqttConfig):
+        self._mqtt_config = mqtt_config
         self._client = mqtt.Client()
-        self._client.user_data_set({"topic": mqtt_topic, "qos": str(mqtt_qos)})
+        self._client.user_data_set(mqtt_config)
         self._client.on_connect = self._on_connect
         self._client.on_message = self._on_message
 
@@ -220,27 +245,32 @@ class MqttSource(Source):
 
         self._img_in_queue = device.getInputQueue(self._img_in.getStreamName())
 
-    def run(self):
-        self._client.connect(host=self._mqtt_host, port=self._mqtt_port)
+    def run(self) -> None:
+        """ Connect and start mqtt loop """
+        self._client.connect(host=self._mqtt_config.host, port=self._mqtt_config.port)
         self._client.loop_start()
 
-    def stop(self):
+    def stop(self) -> None:
+        """Stop and disconnect mqtt loop"""
         self._client.loop_stop()
         self._client.disconnect()
 
     @staticmethod
-    def _on_connect(client: mqtt.Client, userdata: dict[str, str], flags, rc):
+    # pylint: disable=unused-argument
+    def _on_connect(client: mqtt.Client, userdata: MqttConfig, flags: typing.Any,
+                    result_connection: typing.Any) -> None:
         # if we lose the connection and reconnect then subscriptions will be renewed.
-        client.subscribe(topic=userdata["topic"], qos=int(userdata["qos"]))
+        client.subscribe(topic=userdata.topic, qos=userdata.qos)
 
-    def _on_message(self, _: mqtt.Client, user_data: dict[str, str], msg: mqtt.MQTTMessage):
+    # pylint: disable=unused-argument
+    def _on_message(self, _: mqtt.Client, user_data: MqttConfig, msg: mqtt.MQTTMessage) -> None:
         frame_msg = events.events_pb2.FrameMessage()
         frame_msg.ParseFromString(msg.payload)
 
         frame = np.asarray(frame_msg.frame, dtype="uint8")
         frame = cv2.imdecode(frame, cv2.IMREAD_COLOR)
         nn_data = dai.NNData()
-        nn_data.setLayer("data", _to_planar(frame, frame.shape()))
+        nn_data.setLayer("data", _to_planar(frame, (300, 300)))
         self._img_in_queue.send(nn_data)
 
     def get_stream_name(self) -> str:
@@ -261,8 +291,6 @@ class PipelineController:
 
     def __init__(self, img_width: int, img_height: int, frame_processor: FrameProcessor,
                  object_processor: ObjectProcessor, camera: Source, object_node: ObjectDetectionNN):
-        self._img_width = img_width
-        self._img_height = img_height
         self._pipeline = self._configure_pipeline()
         self._frame_processor = frame_processor
         self._object_processor = object_processor
@@ -277,7 +305,7 @@ class PipelineController:
         pipeline.setOpenVINOVersion(version=dai.OpenVINO.VERSION_2021_4)
 
         # Link preview to manip and manip to nn
-        self._camera.link_preview(self._object_node.get_input())
+        self._camera.link(self._object_node.get_input())
 
         logger.info("pipeline configured")
         return pipeline
@@ -288,7 +316,7 @@ class PipelineController:
         :return:
         """
         # Connect to device and start pipeline
-        with dai.Device(self._pipeline) as device:
+        with dai.Device(pipeline=self._pipeline) as device:
             logger.info('MxId: %s', device.getDeviceInfo().getMxId())
             logger.info('USB speed: %s', device.getUsbSpeed())
             logger.info('Connected cameras: %s', device.getConnectedCameras())
@@ -311,7 +339,7 @@ class PipelineController:
                 except Exception as ex:
                     logger.exception("unexpected error: %s", str(ex))
 
-    def _loop_on_camera_events(self, q_nn: dai.DataOutputQueue, q_rgb: dai.DataOutputQueue):
+    def _loop_on_camera_events(self, q_nn: dai.DataOutputQueue, q_rgb: dai.DataOutputQueue) -> None:
         logger.debug("wait for new frame")
 
         # Wait for frame
@@ -325,7 +353,7 @@ class PipelineController:
         in_nn: dai.NNData = q_nn.get()
         self._object_processor.process(in_nn, frame_ref)
 
-    def stop(self):
+    def stop(self) -> None:
         """
         Stop event loop, if loop is not running, do nothing
         :return:
