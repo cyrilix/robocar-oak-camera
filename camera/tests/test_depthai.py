@@ -58,12 +58,12 @@ class TestObjectProcessor:
     def raw_objects_one(self, mocker: pytest_mock.MockerFixture, object1: Object) -> dai.NNData:
         def mock_return(name):
             if name == "ExpandDims":  # Detection boxes
-                boxes = [[0] * 4] * 100
+                boxes: list[list[float]] = [[0.] * 4] * 100
                 boxes[0] = [object1["top"], object1["left"], object1["bottom"], object1["right"]]
                 return np.array(boxes)
 
             elif name == "ExpandDims_2":  # Detection scores
-                scores = [0] * 100
+                scores: list[float] = [0.] * 100
                 scores[0] = object1["score"]
                 return scores
             else:

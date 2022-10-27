@@ -85,9 +85,7 @@ def execute_from_command_line() -> None:
                                            objects_topic=args.mqtt_topic_robocar_objects,
                                            objects_threshold=args.objects_threshold)
 
-    pipeline_controller = cam.PipelineController(img_width=args.image_width,
-                                                 img_height=args.image_height,
-                                                 frame_processor=frame_processor,
+    pipeline_controller = cam.PipelineController(frame_processor=frame_processor,
                                                  object_processor=object_processor)
 
     def sigterm_handler():
