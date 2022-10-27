@@ -4,15 +4,17 @@ Camera event loop
 import abc
 import datetime
 import logging
+import pathlib
 import typing
 from dataclasses import dataclass
 
 import cv2
 import depthai as dai
-import events.events_pb2
+import events.events_pb2 as evt
 import numpy as np
 import numpy.typing as npt
 import paho.mqtt.client as mqtt
+from depthai import Device
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +33,7 @@ class ObjectProcessor:
         self._objects_topic = objects_topic
         self._objects_threshold = objects_threshold
 
-    def process(self, in_nn: dai.NNData, frame_ref) -> None:
+    def process(self, in_nn: dai.NNData, frame_ref: evt.FrameRef) -> None:
         """
         Parse and publish result of NeuralNetwork result
         :param in_nn: NeuralNetwork result read from device
@@ -48,8 +50,8 @@ class ObjectProcessor:
         if boxes.shape[0] > 0:
             self._publish_objects(boxes, frame_ref, scores)
 
-    def _publish_objects(self, boxes: npt.NDArray[np.float64], frame_ref, scores: npt.NDArray[np.float64]) -> None:
-        objects_msg = events.events_pb2.ObjectsMessage()
+    def _publish_objects(self, boxes: npt.NDArray[np.float64], frame_ref: evt.FrameRef, scores: npt.NDArray[np.float64]) -> None:
+        objects_msg = evt.ObjectsMessage()
         objs = []
         for i in range(boxes.shape[0]):
             logger.debug("new object detected: %s", str(boxes[i]))
@@ -105,7 +107,7 @@ class FrameProcessor:
         byte_im = im_buf_arr.tobytes()
 
         now = datetime.datetime.now()
-        frame_msg = events.events_pb2.FrameMessage()
+        frame_msg = evt.FrameMessage()
         frame_msg.id.name = "robocar-oak-camera-oak"
         frame_msg.id.id = str(int(now.timestamp() * 1000))
         frame_msg.id.created_at.FromDatetime(now)
@@ -149,7 +151,7 @@ class ObjectDetectionNN:
     def __init__(self, pipeline: dai.Pipeline):
         # Define a neural network that will make predictions based on the source frames
         detection_nn = pipeline.createNeuralNetwork()
-        detection_nn.setBlobPath(_NN_PATH)
+        detection_nn.setBlobPath(pathlib.Path(_NN_PATH))
         detection_nn.setNumPoolFrames(4)
         detection_nn.input.setBlocking(False)
         detection_nn.setNumInferenceThreads(2)
@@ -230,7 +232,7 @@ class MqttConfig:
 class MqttSource(Source):
     """Image source based onto mqtt stream"""
 
-    def __init__(self, device: dai.Device, pipeline: dai.Pipeline, mqtt_config: MqttConfig):
+    def __init__(self, device: Device, pipeline: dai.Pipeline, mqtt_config: MqttConfig):
         self._mqtt_config = mqtt_config
         self._client = mqtt.Client()
         self._client.user_data_set(mqtt_config)
@@ -264,7 +266,7 @@ class MqttSource(Source):
 
     # pylint: disable=unused-argument
     def _on_message(self, _: mqtt.Client, user_data: MqttConfig, msg: mqtt.MQTTMessage) -> None:
-        frame_msg = events.events_pb2.FrameMessage()
+        frame_msg = evt.FrameMessage()
         frame_msg.ParseFromString(msg.payload)
 
         frame = np.asarray(frame_msg.frame, dtype="uint8")
@@ -276,11 +278,11 @@ class MqttSource(Source):
     def get_stream_name(self) -> str:
         return self._img_out.getStreamName()
 
-    def link(self, input_node: dai.Node.Input):
+    def link(self, input_node: dai.Node.Input) -> None:
         self._img_in.out.link(input_node)
 
 
-def _to_planar(arr: npt.NDArray[int], shape: tuple[int, int]) -> list[int]:
+def _to_planar(arr: npt.NDArray[np.uint8], shape: tuple[int, int]) -> list[int]:
     return [val for channel in cv2.resize(arr, shape).transpose(2, 0, 1) for y_col in channel for val in y_col]
 
 
@@ -316,17 +318,19 @@ class PipelineController:
         :return:
         """
         # Connect to device and start pipeline
-        with dai.Device(pipeline=self._pipeline) as device:
-            logger.info('MxId: %s', device.getDeviceInfo().getMxId())
-            logger.info('USB speed: %s', device.getUsbSpeed())
-            logger.info('Connected cameras: %s', str(device.getConnectedCameras()))
-            logger.info("output queues found: %s", str(device.getOutputQueueNames()))
+        with Device(pipeline=self._pipeline) as dev:
+            logger.info('MxId: %s', dev.getDeviceInfo().getMxId())
+            logger.info('USB speed: %s', dev.getUsbSpeed())
+            logger.info('Connected cameras: %s', str(dev.getConnectedCameras()))
+            logger.info("output queues found: %s", str(''.join(dev.getOutputQueueNames())))  # type: ignore
 
-            device.startPipeline()
+            dev.startPipeline()
             # Queues
             queue_size = 4
-            q_rgb = device.getOutputQueue(name=self._camera.get_stream_name(), maxSize=queue_size, blocking=False)
-            q_nn = device.getOutputQueue(name=self._object_node.get_stream_name(), maxSize=queue_size, blocking=False)
+            q_rgb = dev.getOutputQueue(name=self._camera.get_stream_name(), maxSize=queue_size,  # type: ignore
+                                       blocking=False)
+            q_nn = dev.getOutputQueue(name=self._object_node.get_stream_name(), maxSize=queue_size,  # type: ignore
+                                      blocking=False)
 
             self._stop = False
             while True:
@@ -343,14 +347,14 @@ class PipelineController:
         logger.debug("wait for new frame")
 
         # Wait for frame
-        in_rgb: dai.ImgFrame = q_rgb.get()  # blocking call, will wait until a new data has arrived
+        in_rgb: dai.ImgFrame = q_rgb.get()  # type: ignore # blocking call, will wait until a new data has arrived
         try:
             frame_ref = self._frame_processor.process(in_rgb)
         except FrameProcessError as ex:
             logger.error("unable to process frame: %s", str(ex))
             return
         # Read NN result
-        in_nn: dai.NNData = q_nn.get()
+        in_nn: dai.NNData = q_nn.get()  # type: ignore
         self._object_processor.process(in_nn, frame_ref)
 
     def stop(self) -> None:
@@ -361,9 +365,9 @@ class PipelineController:
         self._stop = True
 
 
-def _bbox_to_object(bbox: npt.NDArray[np.float64], score: float) -> events.events_pb2.Object:
-    obj = events.events_pb2.Object()
-    obj.type = events.events_pb2.TypeObject.ANY
+def _bbox_to_object(bbox: npt.NDArray[np.float64], score: float) -> evt.Object:
+    obj = evt.Object()
+    obj.type = evt.TypeObject.ANY
     obj.top = bbox[0].astype(float)
     obj.right = bbox[3].astype(float)
     obj.bottom = bbox[2].astype(float)

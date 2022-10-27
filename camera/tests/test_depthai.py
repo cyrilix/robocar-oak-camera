@@ -1,26 +1,28 @@
 import datetime
+import typing
 import unittest.mock
 
 import depthai as dai
+import events.events_pb2
 import numpy as np
+import numpy.typing as npt
 import paho.mqtt.client as mqtt
 import pytest
 import pytest_mock
 
 import camera.depthai
-import events.events_pb2
 
 Object = dict[str, float]
 
 
 @pytest.fixture
 def mqtt_client(mocker: pytest_mock.MockerFixture) -> mqtt.Client:
-    return mocker.MagicMock()
+    return mocker.MagicMock()  # type: ignore
 
 
 class TestObjectProcessor:
     @pytest.fixture
-    def frame_ref(self):
+    def frame_ref(self) -> events.events_pb2.FrameRef:
         now = datetime.datetime.now()
         frame_msg = events.events_pb2.FrameMessage()
         frame_msg.id.name = "robocar-oak-camera-oak"
@@ -42,7 +44,7 @@ class TestObjectProcessor:
     def raw_objects_empty(self, mocker: pytest_mock.MockerFixture) -> dai.NNData:
         raw_objects = mocker.MagicMock()
 
-        def mock_return(name):
+        def mock_return(name: str) -> typing.List[typing.Union[int, typing.List[int]]]:
             if name == "ExpandDims":
                 return [[0] * 4] * 100
             elif name == "ExpandDims_2":
@@ -56,7 +58,7 @@ class TestObjectProcessor:
 
     @pytest.fixture
     def raw_objects_one(self, mocker: pytest_mock.MockerFixture, object1: Object) -> dai.NNData:
-        def mock_return(name):
+        def mock_return(name: str) -> typing.Union[npt.NDArray[np.int64], typing.List[float]]:
             if name == "ExpandDims":  # Detection boxes
                 boxes: list[list[float]] = [[0.] * 4] * 100
                 boxes[0] = [object1["top"], object1["left"], object1["bottom"], object1["right"]]
@@ -77,20 +79,24 @@ class TestObjectProcessor:
     def object_processor(self, mqtt_client: mqtt.Client) -> camera.depthai.ObjectProcessor:
         return camera.depthai.ObjectProcessor(mqtt_client, "topic/object", 0.2)
 
-    def test_process_without_object(self, object_processor: camera.depthai.ObjectProcessor, mqtt_client,
-                                    raw_objects_empty, frame_ref):
+    def test_process_without_object(self, object_processor: camera.depthai.ObjectProcessor, mqtt_client: mqtt.Client,
+                                    raw_objects_empty: dai.NNData, frame_ref: events.events_pb2.FrameRef) -> None:
         object_processor.process(raw_objects_empty, frame_ref)
-        mqtt_client.publish.assert_not_called()
+        publish_mock: unittest.mock.MagicMock = mqtt_client.publish  # type: ignore
+        publish_mock.assert_not_called()
 
-    def test_process_with_object_with_low_score(self, object_processor: camera.depthai.ObjectProcessor, mqtt_client,
-                                                raw_objects_one, frame_ref):
+    def test_process_with_object_with_low_score(self, object_processor: camera.depthai.ObjectProcessor,
+                                                mqtt_client: mqtt.Client, raw_objects_one: dai.NNData,
+                                                frame_ref: events.events_pb2.FrameRef) -> None:
         object_processor._objects_threshold = 0.9
         object_processor.process(raw_objects_one, frame_ref)
-        mqtt_client.publish.assert_not_called()
+        publish_mock: unittest.mock.MagicMock = mqtt_client.publish  # type: ignore
+        publish_mock.assert_not_called()
 
     def test_process_with_one_object(self,
-                                     object_processor: camera.depthai.ObjectProcessor, mqtt_client,
-                                     raw_objects_one, frame_ref, object1: Object):
+                                     object_processor: camera.depthai.ObjectProcessor, mqtt_client: mqtt.Client,
+                                     raw_objects_one: dai.NNData, frame_ref: events.events_pb2.FrameRef,
+                                     object1: Object) -> None:
         object_processor.process(raw_objects_one, frame_ref)
         left = object1["left"]
         right = object1["right"]
@@ -98,7 +104,7 @@ class TestObjectProcessor:
         bottom = object1["bottom"]
         score = object1["score"]
 
-        pub_mock: unittest.mock.MagicMock = mqtt_client.publish
+        pub_mock: unittest.mock.MagicMock = mqtt_client.publish  # type: ignore
         pub_mock.assert_called_once_with(payload=unittest.mock.ANY, qos=0, retain=False, topic="topic/object")
         payload = pub_mock.call_args.kwargs['payload']
         objects_msg = events.events_pb2.ObjectsMessage()
@@ -118,13 +124,13 @@ class TestFrameProcessor:
         return camera.depthai.FrameProcessor(mqtt_client, "topic/frame")
 
     def test_process(self, frame_processor: camera.depthai.FrameProcessor, mocker: pytest_mock.MockerFixture,
-                     mqtt_client: mqtt.Client):
+                     mqtt_client: mqtt.Client) -> None:
         img: dai.ImgFrame = mocker.MagicMock()
         mocker.patch(target="cv2.imencode").return_value = (True, np.array(b"img content"))
 
         frame_ref = frame_processor.process(img)
 
-        pub_mock: unittest.mock.MagicMock = mqtt_client.publish
+        pub_mock: unittest.mock.MagicMock = mqtt_client.publish  # type: ignore
         pub_mock.assert_called_once_with(payload=unittest.mock.ANY, qos=0, retain=False, topic="topic/frame")
         payload = pub_mock.call_args.kwargs['payload']
         frame_msg = events.events_pb2.FrameMessage()
@@ -140,7 +146,7 @@ class TestFrameProcessor:
             milliseconds=10) < frame_msg.id.created_at.ToDatetime() < now + datetime.timedelta(milliseconds=10)
 
     def test_process_error(self, frame_processor: camera.depthai.FrameProcessor, mocker: pytest_mock.MockerFixture,
-                           mqtt_client: mqtt.Client):
+                           mqtt_client: mqtt.Client) -> None:
         img: dai.ImgFrame = mocker.MagicMock()
         mocker.patch(target="cv2.imencode").return_value = (False, None)
 

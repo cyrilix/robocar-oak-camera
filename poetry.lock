@@ -771,7 +771,7 @@ requests = ">=2.0.1,<3.0.0"
 
 [[package]]
 name = "robocar-protobuf"
-version = "1.1.1"
+version = "1.1.2"
 description = "Protobuf message definitions for robocar"
 category = "main"
 optional = false
@@ -1526,8 +1526,8 @@ requests-toolbelt = [
     {file = "requests_toolbelt-0.9.1-py2.py3-none-any.whl", hash = "sha256:380606e1d10dc85c3bd47bf5a6095f815ec007be7a8b69c878507068df059e6f"},
 ]
 robocar-protobuf = [
-    {file = "robocar_protobuf-1.1.1-py3-none-any.whl", hash = "sha256:d04b8e4cdacb7286d3425d74fb4402210422469e1240951921029c3dcf8c3e83"},
-    {file = "robocar_protobuf-1.1.1.tar.gz", hash = "sha256:c41dfa9bcc143ea88ac38dee7c52f9672bb06f13ad1bccad3b244c32d3f12073"},
+    {file = "robocar_protobuf-1.1.2-py3-none-any.whl", hash = "sha256:3f47608464576cf10377b1635aa1f2a494445c71dbca1bd7ae1e97c4d09301e6"},
+    {file = "robocar_protobuf-1.1.2.tar.gz", hash = "sha256:7ae5fe6c2b53edd7314d685a5492d945ad315a5a498c1342e95a3b46bf684bbc"},
 ]
 s3transfer = [
     {file = "s3transfer-0.6.0-py3-none-any.whl", hash = "sha256:06176b74f3a15f61f1b4f25a1fc29a4429040b7647133a463da8fa5bd28d5ecd"},

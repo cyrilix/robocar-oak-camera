@@ -5,10 +5,12 @@ import argparse
 import logging
 import os
 import signal
+import typing, types
 
+import depthai as dai
 import paho.mqtt.client as mqtt
 
-from . import depthai as cam
+from . import depthai as cam  # pylint: disable=reimported
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -54,7 +56,7 @@ def _parse_args_cli() -> argparse.Namespace:
     return args
 
 
-def _init_mqtt_client(broker_host: str, broker_port, user: str, password: str, client_id: str) -> mqtt.Client:
+def _init_mqtt_client(broker_host: str, broker_port: int, user: str, password: str, client_id: str) -> mqtt.Client:
     logger.info("Start part.py-robocar-oak-camera")
     client = mqtt.Client(client_id=client_id, clean_session=True, userdata=None, protocol=mqtt.MQTTv311)
 
@@ -85,10 +87,17 @@ def execute_from_command_line() -> None:
                                            objects_topic=args.mqtt_topic_robocar_objects,
                                            objects_threshold=args.objects_threshold)
 
+    pipeline = dai.Pipeline()
     pipeline_controller = cam.PipelineController(frame_processor=frame_processor,
-                                                 object_processor=object_processor)
+                                                 object_processor=object_processor,
+                                                 object_node=cam.ObjectDetectionNN(pipeline=pipeline),
+                                                 camera=cam.CameraSource(pipeline=pipeline,
+                                                                         img_width=args.image_width,
+                                                                         img_height=args.image_width,
+                                                                         ))
 
-    def sigterm_handler():
+    def sigterm_handler(signum: int, frame: typing.Optional[
+        types.FrameType]) -> None:  # pylint: disable=unused-argument  # need to implement handler signature
         logger.info("exit on SIGTERM")
         pipeline_controller.stop()
 
