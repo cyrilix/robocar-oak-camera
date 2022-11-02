@@ -26,6 +26,9 @@ ADD pyproject.toml .
 ADD camera camera
 ADD README.md .
 
+# Poetry expect to found a git project
+ADD .git .git
+
 RUN poetry build
 
 #################
