@@ -20,7 +20,11 @@ FROM base as builder
 RUN apt-get install -y git && \
     pip3 install poetry==1.2.0 && \
     poetry self add "poetry-dynamic-versioning[plugin]"
-ADD . .
+
+ADD poetry.lock .
+ADD pyproject.toml .
+ADD camera camera
+ADD README.md .
 
 RUN poetry build
 
