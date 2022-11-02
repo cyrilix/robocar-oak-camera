@@ -936,7 +936,7 @@ cffi = ">=1.0"
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.10"
-content-hash = "eec5b7818432a7baae3b2f4e02aba74a3aca922974fdb07ee523c560ff0cf3c0"
+content-hash = "4bf5c67ef18f341281d9dd3ca9b2dfc910f94eec436ead3d45109f00bed01f1f"
 
 [metadata.files]
 astroid = [
