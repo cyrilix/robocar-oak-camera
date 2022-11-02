@@ -1,7 +1,8 @@
 FROM docker.io/library/python:3.10-slim as base
 
 # Configure piwheels repo to use pre-compiled numpy wheels for arm
-RUN echo -n "[global]\nextra-index-url=https://www.piwheels.org/simple\n" >> /etc/pip.conf
+RUN echo -n "[global]\n" > /etc/pip.conf &&\
+    echo -n "extra-index-url = https://www.piwheels.org/simple https://git.cyrilix.bzh/api/packages/robocars/pypi/simple \n" >> /etc/pip.conf
 
 RUN apt-get update && apt-get install -y libgl1 libglib2.0-0
 
@@ -38,7 +39,7 @@ RUN mkdir /models
 COPY --from=model-builder /models/mobile_object_localizer_192x192_openvino_2021.4_6shave.blob /models/mobile_object_localizer_192x192_openvino_2021.4_6shave.blob
 
 COPY --from=builder dist/*.whl /tmp/
-RUN pip3 install /tmp/*whl
+RUN pip3 install /tmp/*.whl
 
 WORKDIR /tmp
 USER 1234
