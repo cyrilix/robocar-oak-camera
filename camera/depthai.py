@@ -196,22 +196,19 @@ class CameraSource(Source):
     """Image source based on camera preview"""
 
     def __init__(self, pipeline: dai.Pipeline, img_width: int, img_height: int):
-        cam_rgb = pipeline.createColorCamera()
-        xout_rgb = pipeline.createXLinkOut()
-        xout_rgb.setStreamName("rgb")
-
-        self._cam_rgb = cam_rgb
-        self._xout_rgb = xout_rgb
+        self._cam_rgb = pipeline.createColorCamera()
+        self._xout_rgb = pipeline.createXLinkOut()
+        self._xout_rgb.setStreamName("rgb")
 
         # Properties
-        cam_rgb.setBoardSocket(dai.CameraBoardSocket.RGB)
-        cam_rgb.setPreviewSize(width=img_width, height=img_height)
-        cam_rgb.setInterleaved(False)
-        cam_rgb.setColorOrder(dai.ColorCameraProperties.ColorOrder.RGB)
-        cam_rgb.setFps(30)
+        self._cam_rgb.setBoardSocket(dai.CameraBoardSocket.RGB)
+        self._cam_rgb.setPreviewSize(width=img_width, height=img_height)
+        self._cam_rgb.setInterleaved(False)
+        self._cam_rgb.setColorOrder(dai.ColorCameraProperties.ColorOrder.RGB)
+        self._cam_rgb.setFps(30)
 
         # link camera preview to output
-        cam_rgb.preview.link(xout_rgb.input)
+        self._cam_rgb.preview.link(self._xout_rgb.input)
 
     def link(self, input_node: dai.Node.Input) -> None:
         self._cam_rgb.preview.link(input_node)
@@ -292,25 +289,25 @@ class PipelineController:
     """
 
     def __init__(self, frame_processor: FrameProcessor,
-                 object_processor: ObjectProcessor, camera: Source, object_node: ObjectDetectionNN):
-        self._pipeline = self._configure_pipeline()
+                 object_processor: ObjectProcessor, camera: Source, object_node: ObjectDetectionNN,
+                 pipeline: dai.Pipeline):
         self._frame_processor = frame_processor
         self._object_processor = object_processor
         self._camera = camera
         self._object_node = object_node
         self._stop = False
+        self._pipeline = pipeline
+        self._configure_pipeline()
 
-    def _configure_pipeline(self) -> dai.Pipeline:
+    def _configure_pipeline(self) -> None:
         logger.info("configure pipeline")
-        pipeline = dai.Pipeline()
 
-        pipeline.setOpenVINOVersion(version=dai.OpenVINO.VERSION_2021_4)
+        self._pipeline.setOpenVINOVersion(version=dai.OpenVINO.VERSION_2021_4)
 
         # Link preview to manip and manip to nn
         self._camera.link(self._object_node.get_input())
 
         logger.info("pipeline configured")
-        return pipeline
 
     def run(self) -> None:
         """

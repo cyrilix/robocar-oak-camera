@@ -88,7 +88,8 @@ def execute_from_command_line() -> None:
                                            objects_threshold=args.objects_threshold)
 
     pipeline = dai.Pipeline()
-    pipeline_controller = cam.PipelineController(frame_processor=frame_processor,
+    pipeline_controller = cam.PipelineController(pipeline=pipeline,
+                                                 frame_processor=frame_processor,
                                                  object_processor=object_processor,
                                                  object_node=cam.ObjectDetectionNN(pipeline=pipeline),
                                                  camera=cam.CameraSource(pipeline=pipeline,
