@@ -346,13 +346,19 @@ class PipelineController:
         # Wait for frame
         in_rgb: dai.ImgFrame = q_rgb.get()  # type: ignore # blocking call, will wait until a new data has arrived
         try:
+            logger.debug("process frame")
             frame_ref = self._frame_processor.process(in_rgb)
         except FrameProcessError as ex:
             logger.error("unable to process frame: %s", str(ex))
             return
+        logger.debug("frame processed")
+
+        logger.debug("wait for nn response")
         # Read NN result
         in_nn: dai.NNData = q_nn.get()  # type: ignore
+        logger.debug("process objects")
         self._object_processor.process(in_nn, frame_ref)
+        logger.debug("objects processed")
 
     def stop(self) -> None:
         """
