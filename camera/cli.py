@@ -13,7 +13,6 @@ import paho.mqtt.client as mqtt
 from . import depthai as cam  # pylint: disable=reimported
 
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO)
 
 _DEFAULT_CLIENT_ID = "robocar-depthai"
 
@@ -52,6 +51,10 @@ def _parse_args_cli() -> argparse.Namespace:
     parser.add_argument("-W", "--image-width", help="image width",
                         type=int,
                         default=_get_env_int_value("IMAGE_WIDTH", 126))
+    parser.add_argument("--log", help="Log level",
+                        type=str,
+                        default="info",
+                        choices=["info", "debug"])
     args = parser.parse_args()
     return args
 
@@ -72,9 +75,12 @@ def execute_from_command_line() -> None:
     Cli entrypoint
     :return:
     """
-    logging.basicConfig(level=logging.INFO)
 
     args = _parse_args_cli()
+    if args.log == "info":
+        logging.basicConfig(level=logging.INFO)
+    elif args.log == "debug":
+        logging.basicConfig(level=logging.DEBUG)
 
     client = _init_mqtt_client(broker_host=args.mqtt_broker_host,
                                broker_port=args.mqtt_broker_port,
