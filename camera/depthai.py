@@ -159,6 +159,7 @@ class ObjectDetectionNN:
         self._xout = self._configure_xout_nn(pipeline)
         self._detection_nn.out.link(self._xout.input)
         self._manip_image = self._configure_manip(pipeline)
+        self._manip_image.out.link(self._detection_nn.input)
 
     @staticmethod
     def _configure_manip(pipeline: dai.Pipeline) -> dai.node.ImageManip:
