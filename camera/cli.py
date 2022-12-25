@@ -100,7 +100,7 @@ def execute_from_command_line() -> None:
                                                  object_node=cam.ObjectDetectionNN(pipeline=pipeline),
                                                  camera=cam.CameraSource(pipeline=pipeline,
                                                                          img_width=args.image_width,
-                                                                         img_height=args.image_width,
+                                                                         img_height=args.image_height,
                                                                          ))
 
     def sigterm_handler(signum: int, frame: typing.Optional[
