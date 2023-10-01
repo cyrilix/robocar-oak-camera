@@ -1,4 +1,4 @@
-FROM docker.io/library/python:3.10-slim as base
+FROM docker.io/library/python:3.11-slim as base
 
 # Configure piwheels repo to use pre-compiled numpy wheels for arm
 RUN echo -n "[global]\n" > /etc/pip.conf &&\
@@ -19,7 +19,7 @@ RUN blobconverter --zoo-name mobile_object_localizer_192x192 --zoo-type depthai 
 FROM base as builder
 
 RUN apt-get install -y git && \
-    pip3 install poetry==1.2.0 && \
+    pip3 install poetry && \
     poetry self add "poetry-dynamic-versioning[plugin]"
 
 ADD poetry.lock .
