@@ -196,7 +196,7 @@ class ObjectDetectionNN:
 class CameraSource(Source):
     """Image source based on camera preview"""
 
-    def __init__(self, pipeline: dai.Pipeline, img_width: int, img_height: int):
+    def __init__(self, pipeline: dai.Pipeline, img_width: int, img_height: int, fps: int):
         self._cam_rgb = pipeline.createColorCamera()
         self._xout_rgb = pipeline.createXLinkOut()
         self._xout_rgb.setStreamName("rgb")
@@ -206,7 +206,7 @@ class CameraSource(Source):
         self._cam_rgb.setPreviewSize(width=img_width, height=img_height)
         self._cam_rgb.setInterleaved(False)
         self._cam_rgb.setColorOrder(dai.ColorCameraProperties.ColorOrder.RGB)
-        self._cam_rgb.setFps(30)
+        self._cam_rgb.setFps(fps)
 
         # link camera preview to output
         self._cam_rgb.preview.link(self._xout_rgb.input)

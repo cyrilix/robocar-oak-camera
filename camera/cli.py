@@ -10,7 +10,7 @@ import typing, types
 import depthai as dai
 import paho.mqtt.client as mqtt
 
-from . import depthai as cam  # pylint: disable=reimported
+from camera import oak_pipeline as cam
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +45,10 @@ def _parse_args_cli() -> argparse.Namespace:
                         help="threshold to filter detected objects",
                         type=float,
                         default=_get_env_float_value("OBJECTS_THRESHOLD", 0.2))
+    parser.add_argument("-f", "--camera-fps",
+                        help="set rate at which camera should produce frames",
+                        type=int,
+                        default=30)
     parser.add_argument("-H", "--image-height", help="image height",
                         type=int,
                         default=_get_env_int_value("IMAGE_HEIGHT", 120))
@@ -101,6 +105,7 @@ def execute_from_command_line() -> None:
                                                  camera=cam.CameraSource(pipeline=pipeline,
                                                                          img_width=args.image_width,
                                                                          img_height=args.image_height,
+                                                                         fps=args.camera_fps,
                                                                          ))
 
     def sigterm_handler(signum: int, frame: typing.Optional[
