@@ -22,6 +22,9 @@ _NN_PATH = "/models/mobile_object_localizer_192x192_openvino_2021.4_6shave.blob"
 _NN_WIDTH = 192
 _NN_HEIGHT = 192
 
+_PREVIEW_WIDTH = 640
+_PREVIEW_HEIGHT = 480
+
 
 class ObjectProcessor:
     """
@@ -203,19 +206,30 @@ class CameraSource(Source):
 
         # Properties
         self._cam_rgb.setBoardSocket(dai.CameraBoardSocket.RGB)
-        self._cam_rgb.setPreviewSize(width=img_width, height=img_height)
+        self._cam_rgb.setPreviewSize(width=_PREVIEW_WIDTH, height=_PREVIEW_HEIGHT)
         self._cam_rgb.setInterleaved(False)
         self._cam_rgb.setColorOrder(dai.ColorCameraProperties.ColorOrder.RGB)
         self._cam_rgb.setFps(fps)
+        self._resize_manip = self._configure_manip(pipeline=pipeline, img_width=img_width, img_height=img_height)
 
         # link camera preview to output
-        self._cam_rgb.preview.link(self._xout_rgb.input)
+        self._cam_rgb.preview.link(self._resize_manip.inputImage)
+        self._resize_manip.out.link(self._xout_rgb.input)
 
     def link(self, input_node: dai.Node.Input) -> None:
         self._cam_rgb.preview.link(input_node)
 
     def get_stream_name(self) -> str:
         return self._xout_rgb.getStreamName()
+
+    @staticmethod
+    def _configure_manip(pipeline: dai.Pipeline, img_width: int, img_height: int) -> dai.node.ImageManip:
+        # Resize image
+        manip = pipeline.createImageManip()
+        manip.initialConfig.setResize(img_width, img_height)
+        manip.initialConfig.setFrameType(dai.ImgFrame.Type.RGB888p)
+        manip.initialConfig.setKeepAspectRatio(False)
+        return manip
 
 
 @dataclass
