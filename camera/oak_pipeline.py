@@ -5,6 +5,7 @@ import abc
 import datetime
 import logging
 import pathlib
+import time
 import typing
 from dataclasses import dataclass
 
@@ -344,6 +345,10 @@ class PipelineController:
             q_nn = dev.getOutputQueue(name=self._object_node.get_stream_name(), maxSize=queue_size,  # type: ignore
                                       blocking=False)
 
+            start_time = time.time()
+            counter = 0
+            fps = 0
+            display_time = time.time()
             self._stop = False
             while True:
                 if self._stop:
@@ -354,6 +359,16 @@ class PipelineController:
                 # pylint: disable=broad-except # bad frame or event must not stop loop
                 except Exception as ex:
                     logger.exception("unexpected error: %s", str(ex))
+
+                counter += 1
+                if (time.time() - start_time) > 1:
+                    fps = counter / (time.time() - start_time)
+                    counter = 0
+                    start_time = time.time()
+                if (time.time() - display_time) >= 10:
+                    display_time = time.time()
+                    logger.info("fps: %s", fps)
+
 
     def _loop_on_camera_events(self, q_nn: dai.DataOutputQueue, q_rgb: dai.DataOutputQueue) -> None:
         logger.debug("wait for new frame")
