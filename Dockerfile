@@ -35,6 +35,8 @@ RUN poetry build
 #################
 FROM base
 
+COPY camera_tunning /camera_tuning
+
 RUN mkdir /models
 COPY --from=model-builder /models/mobile_object_localizer_192x192_openvino_2021.4_6shave.blob /models/mobile_object_localizer_192x192_openvino_2021.4_6shave.blob
 

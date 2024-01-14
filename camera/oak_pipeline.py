@@ -390,6 +390,7 @@ class PipelineController:
         self._object_processor.process(in_nn, frame_ref)
         logger.debug("objects processed")
 
+
     def stop(self) -> None:
         """
         Stop event loop, if loop is not running, do nothing

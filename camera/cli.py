@@ -12,6 +12,10 @@ import paho.mqtt.client as mqtt
 
 from camera import oak_pipeline as cam
 
+CAMERA_EXPOSITION_DEFAULT = "default"
+CAMERA_EXPOSITION_8300US = "8300us"
+CAMERA_EXPOSITION_500US = "500us"
+
 logger = logging.getLogger(__name__)
 
 _DEFAULT_CLIENT_ID = "robocar-depthai"
@@ -49,6 +53,10 @@ def _parse_args_cli() -> argparse.Namespace:
                         help="set rate at which camera should produce frames",
                         type=int,
                         default=30)
+    parser.add_argument("--camera-tuning-exposition", type=str,
+                        default=CAMERA_EXPOSITION_DEFAULT,
+                        help="override camera exposition configuration",
+                        choices=[CAMERA_EXPOSITION_DEFAULT, CAMERA_EXPOSITION_500US, CAMERA_EXPOSITION_8300US])
     parser.add_argument("-H", "--image-height", help="image height",
                         type=int,
                         default=_get_env_int_value("IMAGE_HEIGHT", 120))
@@ -98,6 +106,12 @@ def execute_from_command_line() -> None:
                                            objects_threshold=args.objects_threshold)
 
     pipeline = dai.Pipeline()
+    if args.camera_tuning_exposition == CAMERA_EXPOSITION_500US:
+        pipeline.setCameraTuningBlobPath('/camera_tuning/tuning_exp_limit_500us.bin')
+    elif args.camera_tuning_exposition == CAMERA_EXPOSITION_8300US:
+        pipeline.setCameraTuningBlobPath('/camera_tuning/tuning_exp_limit_8300us.bin')
+
+
     pipeline_controller = cam.PipelineController(pipeline=pipeline,
                                                  frame_processor=frame_processor,
                                                  object_processor=object_processor,
