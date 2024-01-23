@@ -10,7 +10,7 @@ import paho.mqtt.client as mqtt
 import pytest
 import pytest_mock
 
-import camera.depthai
+from camera.oak_pipeline import DisparityProcessor, ObjectProcessor, FrameProcessor, FrameProcessError
 
 Object = dict[str, float]
 
@@ -76,16 +76,16 @@ class TestObjectProcessor:
         return m
 
     @pytest.fixture
-    def object_processor(self, mqtt_client: mqtt.Client) -> camera.depthai.ObjectProcessor:
-        return camera.depthai.ObjectProcessor(mqtt_client, "topic/object", 0.2)
+    def object_processor(self, mqtt_client: mqtt.Client) -> ObjectProcessor:
+        return ObjectProcessor(mqtt_client, "topic/object", 0.2)
 
-    def test_process_without_object(self, object_processor: camera.depthai.ObjectProcessor, mqtt_client: mqtt.Client,
+    def test_process_without_object(self, object_processor: ObjectProcessor, mqtt_client: mqtt.Client,
                                     raw_objects_empty: dai.NNData, frame_ref: events.events_pb2.FrameRef) -> None:
         object_processor.process(raw_objects_empty, frame_ref)
         publish_mock: unittest.mock.MagicMock = mqtt_client.publish  # type: ignore
         publish_mock.assert_not_called()
 
-    def test_process_with_object_with_low_score(self, object_processor: camera.depthai.ObjectProcessor,
+    def test_process_with_object_with_low_score(self, object_processor: ObjectProcessor,
                                                 mqtt_client: mqtt.Client, raw_objects_one: dai.NNData,
                                                 frame_ref: events.events_pb2.FrameRef) -> None:
         object_processor._objects_threshold = 0.9
@@ -94,7 +94,7 @@ class TestObjectProcessor:
         publish_mock.assert_not_called()
 
     def test_process_with_one_object(self,
-                                     object_processor: camera.depthai.ObjectProcessor, mqtt_client: mqtt.Client,
+                                     object_processor: ObjectProcessor, mqtt_client: mqtt.Client,
                                      raw_objects_one: dai.NNData, frame_ref: events.events_pb2.FrameRef,
                                      object1: Object) -> None:
         object_processor.process(raw_objects_one, frame_ref)
@@ -120,10 +120,10 @@ class TestObjectProcessor:
 
 class TestFrameProcessor:
     @pytest.fixture
-    def frame_processor(self, mqtt_client: mqtt.Client) -> camera.depthai.FrameProcessor:
-        return camera.depthai.FrameProcessor(mqtt_client, "topic/frame")
+    def frame_processor(self, mqtt_client: mqtt.Client) -> FrameProcessor:
+        return FrameProcessor(mqtt_client, "topic/frame")
 
-    def test_process(self, frame_processor: camera.depthai.FrameProcessor, mocker: pytest_mock.MockerFixture,
+    def test_process(self, frame_processor: FrameProcessor, mocker: pytest_mock.MockerFixture,
                      mqtt_client: mqtt.Client) -> None:
         img: dai.ImgFrame = mocker.MagicMock()
         mocker.patch(target="cv2.imencode").return_value = (True, np.array(b"img content"))
@@ -145,12 +145,57 @@ class TestFrameProcessor:
         assert now - datetime.timedelta(
             milliseconds=10) < frame_msg.id.created_at.ToDatetime() < now + datetime.timedelta(milliseconds=10)
 
-    def test_process_error(self, frame_processor: camera.depthai.FrameProcessor, mocker: pytest_mock.MockerFixture,
+    def test_process_error(self, frame_processor: FrameProcessor, mocker: pytest_mock.MockerFixture,
                            mqtt_client: mqtt.Client) -> None:
         img: dai.ImgFrame = mocker.MagicMock()
         mocker.patch(target="cv2.imencode").return_value = (False, None)
 
-        with pytest.raises(camera.depthai.FrameProcessError) as ex:
+        with pytest.raises(FrameProcessError) as ex:
             _ = frame_processor.process(img)
+        exception_raised = ex.value
+        assert exception_raised.message == "unable to process to encode frame to jpg"
+
+
+class TestDisparityProcessor:
+    @pytest.fixture
+    def frame_ref(self) -> events.events_pb2.FrameRef:
+        now = datetime.datetime.now()
+        frame_msg = events.events_pb2.FrameMessage()
+        frame_msg.id.name = "robocar-oak-camera-oak"
+        frame_msg.id.id = str(int(now.timestamp() * 1000))
+        frame_msg.id.created_at.FromDatetime(now)
+        return frame_msg.id
+
+    @pytest.fixture
+    def disparity_processor(self, mqtt_client: mqtt.Client) -> DisparityProcessor:
+        return DisparityProcessor(mqtt_client, "topic/disparity")
+
+    def test_process(self, disparity_processor: DisparityProcessor, mocker: pytest_mock.MockerFixture,
+                     frame_ref: events.events_pb2.FrameRef,
+                     mqtt_client: mqtt.Client) -> None:
+        img: dai.ImgFrame = mocker.MagicMock()
+        mocker.patch(target="cv2.imencode").return_value = (True, np.array(b"img content"))
+
+        disparity_processor.process(img, frame_ref, 42)
+
+        pub_mock: unittest.mock.MagicMock = mqtt_client.publish  # type: ignore
+        pub_mock.assert_called_once_with(payload=unittest.mock.ANY, qos=0, retain=False, topic="topic/disparity")
+        payload = pub_mock.call_args.kwargs['payload']
+        disparity_msg = events.events_pb2.DisparityMessage()
+        disparity_msg.ParseFromString(payload)
+
+        assert disparity_msg.frame_ref == frame_ref
+        assert disparity_msg.disparity == b"img content"
+        assert disparity_msg.focal_length_in_pixels == 42
+        assert disparity_msg.baseline_in_mm == 75
+
+    def test_process_error(self, disparity_processor: DisparityProcessor, mocker: pytest_mock.MockerFixture,
+                           frame_ref: events.events_pb2.FrameRef,
+                           mqtt_client: mqtt.Client) -> None:
+        img: dai.ImgFrame = mocker.MagicMock()
+        mocker.patch(target="cv2.imencode").return_value = (False, None)
+
+        with pytest.raises(FrameProcessError) as ex:
+            disparity_processor.process(img, frame_ref, 42)
         exception_raised = ex.value
         assert exception_raised.message == "unable to process to encode frame to jpg"

@@ -26,6 +26,8 @@ _NN_HEIGHT = 192
 _PREVIEW_WIDTH = 640
 _PREVIEW_HEIGHT = 480
 
+_CAMERA_BASELINE_IN_MM = 75
+
 
 class ObjectProcessor:
     """
@@ -122,6 +124,37 @@ class FrameProcessor:
                                   qos=0,
                                   retain=False)
         return frame_msg.id
+
+
+class DisparityProcessor:
+    """
+       Processor for camera frames
+       """
+
+    def __init__(self, mqtt_client: mqtt.Client, disparity_topic: str):
+        self._mqtt_client = mqtt_client
+        self._disparity_topic = disparity_topic
+
+    def process(self, img: dai.ImgFrame, frame_ref: evt.FrameRef, focal_length_in_pixels: float,
+                baseline_mm: float = _CAMERA_BASELINE_IN_MM) -> None:
+        im_frame = img.getCvFrame()
+        is_success, im_buf_arr = cv2.imencode(".jpg", im_frame)
+        if not is_success:
+            raise FrameProcessError("unable to process to encode frame to jpg")
+        byte_im = im_buf_arr.tobytes()
+
+        disparity_msg = evt.DisparityMessage()
+        disparity_msg.disparity = byte_im
+        disparity_msg.frame_ref.name = frame_ref.name
+        disparity_msg.frame_ref.id = frame_ref.id
+        disparity_msg.frame_ref.created_at.FromDatetime(frame_ref.created_at.ToDatetime())
+        disparity_msg.focal_length_in_pixels = focal_length_in_pixels
+        disparity_msg.baseline_in_mm = baseline_mm
+
+        self._mqtt_client.publish(topic=self._disparity_topic,
+                                  payload=disparity_msg.SerializeToString(),
+                                  qos=0,
+                                  retain=False)
 
 
 class Source(abc.ABC):
@@ -233,6 +266,49 @@ class CameraSource(Source):
         return manip
 
 
+class DepthSource(Source):
+    def __init__(self, pipeline: dai.Pipeline,
+                 extended_disparity: bool = False,
+                 subpixel: bool = False,
+                 lr_check: bool = True
+                 ) -> None:
+        """
+        # Closer-in minimum depth, disparity range is doubled (from 95 to 190):
+        extended_disparity = False
+        # Better accuracy for longer distance, fractional disparity 32-levels:
+        subpixel = False
+        # Better handling for occlusions:
+        lr_check = True
+        """
+        self._monoLeft = pipeline.create(dai.node.MonoCamera)
+        self._monoRight = pipeline.create(dai.node.MonoCamera)
+        self._depth = pipeline.create(dai.node.StereoDepth)
+        self._xout_disparity = pipeline.create(dai.node.XLinkOut)
+
+        self._xout_disparity.setStreamName("disparity")
+
+        # Properties
+        self._monoLeft.setResolution(dai.MonoCameraProperties.SensorResolution.THE_400_P)
+        self._monoLeft.setCamera("left")
+        self._monoRight.setResolution(dai.MonoCameraProperties.SensorResolution.THE_400_P)
+        self._monoRight.setCamera("right")
+
+        # Create a node that will produce the depth map
+        # (using disparity output as it's easier to visualize depth this way)
+        self._depth.setDefaultProfilePreset(dai.node.StereoDepth.PresetMode.HIGH_DENSITY)
+        # Options: MEDIAN_OFF, KERNEL_3x3, KERNEL_5x5, KERNEL_7x7 (default)
+        self._depth.initialConfig.setMedianFilter(dai.MedianFilter.KERNEL_7x7)
+        self._depth.setLeftRightCheck(lr_check)
+        self._depth.setExtendedDisparity(extended_disparity)
+        self._depth.setSubpixel(subpixel)
+
+    def get_stream_name(self) -> str:
+        return self._xout_disparity.getStreamName()
+
+    def link(self, input_node: dai.Node.Input) -> None:
+        self._depth.disparity.link(input_node)
+
+
 @dataclass
 class MqttConfig:
     """MQTT configuration"""
@@ -305,15 +381,19 @@ class PipelineController:
     """
 
     def __init__(self, frame_processor: FrameProcessor,
-                 object_processor: ObjectProcessor, camera: Source, object_node: ObjectDetectionNN,
+                 object_processor: ObjectProcessor, disparity_processor: DisparityProcessor,
+                 camera: Source, depth_source: Source, object_node: ObjectDetectionNN,
                  pipeline: dai.Pipeline):
         self._frame_processor = frame_processor
         self._object_processor = object_processor
+        self._disparity_processor = disparity_processor
         self._camera = camera
+        self._depth_source = depth_source
         self._object_node = object_node
         self._stop = False
         self._pipeline = pipeline
         self._configure_pipeline()
+        self._focal_length_in_pixels: float | None = None
 
     def _configure_pipeline(self) -> None:
         logger.info("configure pipeline")
@@ -337,6 +417,11 @@ class PipelineController:
             logger.info('Connected cameras: %s', str(dev.getConnectedCameras()))
             logger.info("output queues found: %s", str(''.join(dev.getOutputQueueNames())))  # type: ignore
 
+            calib_data = dev.readCalibration()
+            intrinsics = calib_data.getCameraIntrinsics(dai.CameraBoardSocket.CAM_C)
+            self._focal_length_in_pixels = intrinsics[0][0]
+            logger.info('Right mono camera focal length in pixels: %s', self._focal_length_in_pixels)
+
             dev.startPipeline()
             # Queues
             queue_size = 4
@@ -344,6 +429,8 @@ class PipelineController:
                                        blocking=False)
             q_nn = dev.getOutputQueue(name=self._object_node.get_stream_name(), maxSize=queue_size,  # type: ignore
                                       blocking=False)
+            q_disparity = dev.getOutputQueue(name=self._depth_source.get_stream_name(), maxSize=queue_size,  # type: ignore
+                                             blocking=False)
 
             start_time = time.time()
             counter = 0
@@ -355,7 +442,7 @@ class PipelineController:
                     logger.info("stop loop event")
                     return
                 try:
-                    self._loop_on_camera_events(q_nn, q_rgb)
+                    self._loop_on_camera_events(q_nn, q_rgb, q_disparity)
                 # pylint: disable=broad-except # bad frame or event must not stop loop
                 except Exception as ex:
                     logger.exception("unexpected error: %s", str(ex))
@@ -369,8 +456,7 @@ class PipelineController:
                     display_time = time.time()
                     logger.info("fps: %s", fps)
 
-
-    def _loop_on_camera_events(self, q_nn: dai.DataOutputQueue, q_rgb: dai.DataOutputQueue) -> None:
+    def _loop_on_camera_events(self, q_nn: dai.DataOutputQueue, q_rgb: dai.DataOutputQueue, q_disparity: dai.DataOutputQueue) -> None:
         logger.debug("wait for new frame")
 
         # Wait for frame
@@ -390,6 +476,11 @@ class PipelineController:
         self._object_processor.process(in_nn, frame_ref)
         logger.debug("objects processed")
 
+        logger.debug("process disparity")
+        in_disparity: dai.ImgFrame = q_disparity.get()  # type: ignore
+        self._disparity_processor.process(in_disparity, frame_ref=frame_ref,
+                                          focal_length_in_pixels=self._focal_length_in_pixels)
+        logger.debug("disparity processed")
 
     def stop(self) -> None:
         """

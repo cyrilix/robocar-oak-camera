@@ -11,6 +11,7 @@ import depthai as dai
 import paho.mqtt.client as mqtt
 
 from camera import oak_pipeline as cam
+from oak_pipeline import DisparityProcessor
 
 CAMERA_EXPOSITION_DEFAULT = "default"
 CAMERA_EXPOSITION_8300US = "8300us"
@@ -49,6 +50,9 @@ def _parse_args_cli() -> argparse.Namespace:
                         help="threshold to filter detected objects",
                         type=float,
                         default=_get_env_float_value("OBJECTS_THRESHOLD", 0.2))
+    parser.add_argument("-o", "---mqtt-topic-robocar-disparity",
+                        help="MQTT topic where to publish disparity results",
+                        default=_get_env_value("MQTT_TOPIC_DISPARITY", "/disparity"))
     parser.add_argument("-f", "--camera-fps",
                         help="set rate at which camera should produce frames",
                         type=int,
@@ -104,6 +108,7 @@ def execute_from_command_line() -> None:
     object_processor = cam.ObjectProcessor(mqtt_client=client,
                                            objects_topic=args.mqtt_topic_robocar_objects,
                                            objects_threshold=args.objects_threshold)
+    disparity_processor = cam.DisparityProcessor(mqtt_client=client, disparity_topic=args.mqtt_topic_robocar_disparity)
 
     pipeline = dai.Pipeline()
     if args.camera_tuning_exposition == CAMERA_EXPOSITION_500US:
@@ -120,7 +125,9 @@ def execute_from_command_line() -> None:
                                                                          img_width=args.image_width,
                                                                          img_height=args.image_height,
                                                                          fps=args.camera_fps,
-                                                                         ))
+                                                                         ),
+                                                 depth_source=cam.DepthSource(pipeline=pipeline),
+                                                 disparity_processor=disparity_processor)
 
     def sigterm_handler(signum: int, frame: typing.Optional[
         types.FrameType]) -> None:  # pylint: disable=unused-argument  # need to implement handler signature
