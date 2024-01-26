@@ -10,12 +10,12 @@ packages = [
 
 [tool.poetry.dependencies]
 python = "^3.11"
-paho-mqtt = "^1.6.1"
-depthai = "^2.22.0"
+paho-mqtt = "^1.6"
+depthai = "^2"
 protobuf3 = "^0.2.1"
 google = "^3.0.0"
-protobuf = "^4.21.8"
-opencv-python-headless = "^4.6.0.66"
+protobuf = "^4.21"
+opencv-python-headless = "^4.6.0"
 robocar-protobuf = {version = "^1.5", source = "robocar"}
 
 
