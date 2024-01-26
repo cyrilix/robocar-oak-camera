@@ -266,11 +266,163 @@ class CameraSource(Source):
         return manip
 
 
+class StereoDepthPostFilter(abc.ABC):
+    @abc.abstractmethod
+    def apply(self, config: dai.RawStereoDepthConfig) -> None:
+        pass
+
+
+class MedianFilter(StereoDepthPostFilter):
+    """
+    This is a non-edge preserving Median filter, which can be used to reduce noise and smoothen the depth map.
+    Median filter is implemented in hardware, so it’s the fastest filter.
+    """
+    def __init__(self, value: dai.MedianFilter = dai.MedianFilter.KERNEL_7x7) -> None:
+        self._value = value
+
+    def apply(self, config: dai.RawStereoDepthConfig) -> None:
+        config.postProcessing.median.value = self._value
+
+
+class SpeckleFilter(StereoDepthPostFilter):
+    """
+    Speckle Filter is used to reduce the speckle noise. Speckle noise is a region with huge variance between
+    neighboring disparity/depth pixels, and speckle filter tries to filter this region.
+    """
+    def __init__(self, enable: bool = True, speckle_range: int = 50) -> None:
+        """
+        :param enable: Whether to enable or disable the filter.
+        :param speckle_range: Speckle search range.
+        """
+        self._enable = enable
+        self._speckle_range = speckle_range
+
+    def apply(self, config: dai.RawStereoDepthConfig) -> None:
+        config.postProcessing.speckleFilter.enable = self._enable
+        config.postProcessing.speckleFilter.speckleRange = self._speckle_range
+
+
+class TemporalFilter(StereoDepthPostFilter):
+    """
+    Temporal Filter is intended to improve the depth data persistency by manipulating per-pixel values based on
+    previous frames. The filter performs a single pass on the data, adjusting the depth values while also updating the
+    tracking history. In cases where the pixel data is missing or invalid, the filter uses a user-defined persistency
+    mode to decide whether the missing value should be rectified with stored data. Note that due to its reliance on
+    historic data the filter may introduce visible blurring/smearing artifacts, and therefore is best-suited for
+    static scenes.
+    """
+    def __init__(self,
+                 enable: bool = True,
+                 persistencyMode: dai.RawStereoDepthConfig.PostProcessing.TemporalFilter.PersistencyMode=dai.RawStereoDepthConfig.PostProcessing.TemporalFilter.PersistencyMode.VALID_2_IN_LAST_4,
+                 alpha: float = 0.4,
+                 delta: int = 0):
+        """
+        :param enable: Whether to enable or disable the filter.
+        :param persistencyMode: Persistency mode. If the current disparity/depth value is invalid, it will be replaced
+        by an older value, based on persistency mode.
+        :param alpha: The Alpha factor in an exponential moving average with Alpha=1 - no filter.
+        Alpha = 0 - infinite filter. Determines the extent of the temporal history that should be averaged.
+        :param delta: Step-size boundary. Establishes the threshold used to preserve surfaces (edges).
+        If the disparity value between neighboring pixels exceed the disparity threshold set by this delta parameter,
+        then filtering will be temporarily disabled. Default value 0 means auto: 3 disparity integer levels.
+        In case of subpixel mode it’s 3*number of subpixel levels.
+        """
+        self._enable = enable
+        self._persistencyMode = persistencyMode
+        self._alpha = alpha
+        self._delta = delta
+
+
+    def apply(self, config: dai.RawStereoDepthConfig) -> None:
+        config.postProcessing.temporalFilter.enable = self._enable
+        config.postProcessing.temporalFilter.persistencyMode = self._persistencyMode
+        config.postProcessing.temporalFilter.alpha = self._alpha
+        config.postProcessing.temporalFilter.delta = self._delta
+
+
+class SpatialFilter(StereoDepthPostFilter):
+    """
+    Spatial Edge-Preserving Filter will fill invalid depth pixels with valid neighboring depth pixels. It performs a
+    series of 1D horizontal and vertical passes or iterations, to enhance the smoothness of the reconstructed data.
+    """
+    def __init__(self,
+                 enable: bool = True,
+                 hole_filling_radius: int = 2,
+                 alpha: float = 0.5,
+                 delta: int = 0,
+                 num_iterations: int = 1):
+        """
+        :param enable: Whether to enable or disable the filter.
+        :param hole_filling_radius: An in-place heuristic symmetric hole-filling mode applied horizontally during
+        the filter passes. Intended to rectify minor artefacts with minimal performance impact. Search radius for
+        hole filling.
+        :param alpha: The Alpha factor in an exponential moving average with Alpha=1 - no filter.
+        Alpha = 0 - infinite filter. Determines the amount of smoothing.
+        :param delta: Step-size boundary. Establishes the threshold used to preserve “edges”. If the disparity value
+        between neighboring pixels exceed the disparity threshold set by this delta parameter, then filtering will be
+        temporarily disabled. Default value 0 means auto: 3 disparity integer levels. In case of subpixel mode it’s
+        3*number of subpixel levels.
+        :param num_iterations: Number of iterations over the image in both horizontal and vertical direction.
+        """
+        self._enable = enable
+        self._hole_filling_radius = hole_filling_radius
+        self._alpha = alpha
+        self._delta = delta
+        self._num_iterations = num_iterations
+
+    def apply(self, config: dai.RawStereoDepthConfig) -> None:
+        config.postProcessing.spatialFilter.enable = self._enable
+        config.postProcessing.spatialFilter.holeFillingRadius = self._hole_filling_radius
+        config.postProcessing.spatialFilter.alpha = self._alpha
+        config.postProcessing.spatialFilter.delta = self._delta
+        config.postProcessing.spatialFilter.numIterations = self._num_iterations
+
+
+class ThresholdFilter(StereoDepthPostFilter):
+    """
+    Threshold Filter filters out all disparity/depth pixels outside the configured min/max threshold values.
+    """
+    def __init__(self, min_range: int = 400, max_range: int = 15000):
+        """
+        :param min_range: Minimum range in depth units. Depth values under this value are invalidated.
+        :param max_range: Maximum range in depth units. Depth values over this value are invalidated.
+        """
+        self._min_range = min_range
+        self._max_range = max_range
+
+    def apply(self, config: dai.RawStereoDepthConfig) -> None:
+        config.postProcessing.thresholdFilter.minRange = self._min_range
+        config.postProcessing.thresholdFilter.maxRange = self._max_range
+
+
+class DecimationFilter(StereoDepthPostFilter):
+    """
+    Decimation Filter will sub-samples the depth map, which means it reduces the depth scene complexity and allows
+    other filters to run faster. Setting decimationFactor to 2 will downscale 1280x800 depth map to 640x400.
+    """
+    def __init__(self,
+                 decimation_factor: int = 1,
+                 decimation_mode: dai.RawStereoDepthConfig.PostProcessing.DecimationFilter.DecimationMode = dai.RawStereoDepthConfig.PostProcessing.DecimationFilter.DecimationMode.PIXEL_SKIPPING
+                 ):
+        """
+        :param decimation_factor: Decimation factor. Valid values are 1,2,3,4. Disparity/depth map x/y resolution will
+        be decimated with this value.
+        :param decimation_mode: Decimation algorithm type.
+        """
+        self._decimation_factor = decimation_factor
+        self._mode = decimation_mode
+
+    def apply(self, config: dai.RawStereoDepthConfig) -> None:
+        config.postProcessing.decimationFilter.decimationFactor = self._decimation_factor
+        config.postProcessing.decimationFilter.decimationMode = self._mode
+
+
 class DepthSource(Source):
     def __init__(self, pipeline: dai.Pipeline,
                  extended_disparity: bool = False,
                  subpixel: bool = False,
-                 lr_check: bool = True
+                 lr_check: bool = True,
+                 *filters: StereoDepthPostFilter
                  ) -> None:
         """
         # Closer-in minimum depth, disparity range is doubled (from 95 to 190):
@@ -301,6 +453,13 @@ class DepthSource(Source):
         self._depth.setLeftRightCheck(lr_check)
         self._depth.setExtendedDisparity(extended_disparity)
         self._depth.setSubpixel(subpixel)
+
+        if len(filters) > 0:
+            # Configure post-processing filters
+            config = self._depth.initialConfig.get()
+            for filter in filters:
+                filter.apply(config)
+            self._depth.initialConfig.set(config)
 
     def get_stream_name(self) -> str:
         return self._xout_disparity.getStreamName()
