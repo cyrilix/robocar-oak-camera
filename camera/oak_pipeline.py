@@ -332,7 +332,6 @@ class TemporalFilter(StereoDepthPostFilter):
         self._alpha = alpha
         self._delta = delta
 
-
     def apply(self, config: dai.RawStereoDepthConfig) -> None:
         config.postProcessing.temporalFilter.enable = self._enable
         config.postProcessing.temporalFilter.persistencyMode = self._persistencyMode
@@ -442,8 +441,10 @@ class DepthSource(Source):
         # Properties
         self._monoLeft.setResolution(dai.MonoCameraProperties.SensorResolution.THE_400_P)
         self._monoLeft.setCamera("left")
+        self._monoLeft.out.link(self._depth.left)
         self._monoRight.setResolution(dai.MonoCameraProperties.SensorResolution.THE_400_P)
         self._monoRight.setCamera("right")
+        self._monoRight.out.link(self._depth.right)
 
         # Create a node that will produce the depth map
         # (using disparity output as it's easier to visualize depth this way)
@@ -453,6 +454,7 @@ class DepthSource(Source):
         self._depth.setLeftRightCheck(lr_check)
         self._depth.setExtendedDisparity(extended_disparity)
         self._depth.setSubpixel(subpixel)
+        self._depth.disparity.link(self._xout_disparity.input)
 
         if len(filters) > 0:
             # Configure post-processing filters
