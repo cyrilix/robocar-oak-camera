@@ -6,8 +6,8 @@ import datetime
 import logging
 import pathlib
 import time
-import typing
 from dataclasses import dataclass
+from typing import List, Any
 
 import cv2
 import depthai as dai
@@ -97,7 +97,7 @@ class FrameProcessor:
         self._mqtt_client = mqtt_client
         self._frame_topic = frame_topic
 
-    def process(self, img: dai.ImgFrame) -> typing.Any:
+    def process(self, img: dai.ImgFrame) -> Any:
         """
         Publish camera frames
         :param img: image read from camera
@@ -421,7 +421,7 @@ class DepthSource(Source):
                  extended_disparity: bool = False,
                  subpixel: bool = False,
                  lr_check: bool = True,
-                 *filters: StereoDepthPostFilter
+                 stereo_filters: List[StereoDepthPostFilter] = []
                  ) -> None:
         """
         # Closer-in minimum depth, disparity range is doubled (from 95 to 190):
@@ -456,10 +456,10 @@ class DepthSource(Source):
         self._depth.setSubpixel(subpixel)
         self._depth.disparity.link(self._xout_disparity.input)
 
-        if len(filters) > 0:
+        if len(stereo_filters) > 0:
             # Configure post-processing filters
             config = self._depth.initialConfig.get()
-            for filter in filters:
+            for filter in stereo_filters:
                 filter.apply(config)
             self._depth.initialConfig.set(config)
 
@@ -509,8 +509,8 @@ class MqttSource(Source):
 
     @staticmethod
     # pylint: disable=unused-argument
-    def _on_connect(client: mqtt.Client, userdata: MqttConfig, flags: typing.Any,
-                    result_connection: typing.Any) -> None:
+    def _on_connect(client: mqtt.Client, userdata: MqttConfig, flags: Any,
+                    result_connection: Any) -> None:
         # if we lose the connection and reconnect then subscriptions will be renewed.
         client.subscribe(topic=userdata.topic, qos=userdata.qos)
 

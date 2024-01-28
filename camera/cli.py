@@ -251,7 +251,7 @@ def execute_from_command_line() -> None:
                                                                               extended_disparity=args.stereo_mode_extended_disparity,
                                                                               subpixel=args.stereo_mode_subpixel,
                                                                               lr_check=args.stereo_mode_lr_check,
-                                                                              *stereo_filters),
+                                                                              stereo_filters=stereo_filters),
                                                  disparity_processor=disparity_processor)
 
     def sigterm_handler(signum: int, frame: typing.Optional[
