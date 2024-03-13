@@ -16,7 +16,7 @@ protobuf3 = "^0.2.1"
 google = "^3.0.0"
 protobuf = "^4.21"
 opencv-python-headless = "^4.6.0"
-robocar-protobuf = {version = "^1.5", source = "robocar"}
+robocar-protobuf = {version = "^1.6", source = "robocar"}
 
 
 [tool.poetry.group.test.dependencies]
