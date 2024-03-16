@@ -590,8 +590,11 @@ class PipelineController:
                                        blocking=False)
             q_nn = dev.getOutputQueue(name=self._object_node.get_stream_name(), maxSize=queue_size,  # type: ignore
                                       blocking=False)
-            q_disparity = dev.getOutputQueue(name=self._depth_source.get_stream_name(), maxSize=queue_size,  # type: ignore
-                                             blocking=False)
+            if self._disparity_processor is not None:
+                q_disparity = dev.getOutputQueue(name=self._depth_source.get_stream_name(), maxSize=queue_size,  # type: ignore
+                                                 blocking=False)
+            else:
+                q_disparity = None
 
             start_time = time.time()
             counter = 0
@@ -638,9 +641,10 @@ class PipelineController:
         logger.debug("objects processed")
 
         logger.debug("process disparity")
-        in_disparity: dai.ImgFrame = q_disparity.get()  # type: ignore
-        self._disparity_processor.process(in_disparity, frame_ref=frame_ref,
-                                          focal_length_in_pixels=self._focal_length_in_pixels)
+        if self._disparity_processor is not None:
+            in_disparity: dai.ImgFrame = q_disparity.get()  # type: ignore
+            self._disparity_processor.process(in_disparity, frame_ref=frame_ref,
+                                              focal_length_in_pixels=self._focal_length_in_pixels)
         logger.debug("disparity processed")
 
     def stop(self) -> None:

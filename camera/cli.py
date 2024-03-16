@@ -75,7 +75,10 @@ def _parse_args_cli() -> argparse.Namespace:
                         default="info",
                         choices=["info", "debug"])
 
-
+    parser.add_argument("--disable-disparity", action="store_true",
+                    help="enable disparity frame",
+                    default=False
+                    )
     parser.add_argument("--stereo-mode-lr-check",
                         help="remove incorrectly calculated disparity pixels due to occlusions at object borders",
                         default=False, action="store_true"
@@ -228,7 +231,16 @@ def execute_from_command_line() -> None:
     object_processor = cam.ObjectProcessor(mqtt_client=client,
                                            objects_topic=args.mqtt_topic_robocar_objects,
                                            objects_threshold=args.objects_threshold)
-    disparity_processor = cam.DisparityProcessor(mqtt_client=client, disparity_topic=args.mqtt_topic_robocar_disparity)
+    if args.disable_disparity == False:
+        depth_source = cam.DepthSource(pipeline=pipeline,
+                                       extended_disparity=args.stereo_mode_extended_disparity,
+                                       subpixel=args.stereo_mode_subpixel,
+                                       lr_check=args.stereo_mode_lr_check,
+                                       stereo_filters=stereo_filters),
+        disparity_processor = cam.DisparityProcessor(mqtt_client=client, disparity_topic=args.mqtt_topic_robocar_disparity)
+    else:
+        disparity_processor = None
+        depth_source = None
 
     pipeline = dai.Pipeline()
     if args.camera_tuning_exposition == CAMERA_EXPOSITION_500US:
@@ -247,11 +259,7 @@ def execute_from_command_line() -> None:
                                                                          img_height=args.image_height,
                                                                          fps=args.camera_fps,
                                                                          ),
-                                                 depth_source=cam.DepthSource(pipeline=pipeline,
-                                                                              extended_disparity=args.stereo_mode_extended_disparity,
-                                                                              subpixel=args.stereo_mode_subpixel,
-                                                                              lr_check=args.stereo_mode_lr_check,
-                                                                              stereo_filters=stereo_filters),
+                                                 depth_source=depth_source,
                                                  disparity_processor=disparity_processor)
 
     def sigterm_handler(signum: int, frame: typing.Optional[
